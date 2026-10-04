@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Портфельная лаборатория — бизнес-аналитика и прогнозирование</title>
+  <meta name="description" content="Оптимизация десяти индикаторов по Марковицу и Шарпу, эффективная граница и сравнение реальной доходности портфелей.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css">
+  <script defer src="vendor/echarts.min.js"></script><script defer src="vendor/xlsx.full.min.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="#"><span class="brand-icon">∑</span><span>Портфельная<span class="brand-light"> лаборатория</span></span></a><span class="course">Бизнес-аналитика и прогнозирование</span><button class="button ghost" id="method-button">Методика расчёта</button></header>
+  <main>
+    <div class="page-heading"><div><p class="eyebrow">АНАЛИЗ ПОРТФЕЛЯ / 10 ИНДИКАТОРОВ</p><h1>Доходность под контролем.</h1><p class="subtitle">Найдите баланс доходности и риска с учётом инфляции.</p></div><div class="heading-actions"><button class="button ghost" id="template-button">Скачать Excel-шаблон</button><label class="button primary" for="file-input">Загрузить Excel</label><input type="file" id="file-input" accept=".xlsx,.xls" hidden></div></div>
+    <div class="dataset-strip"><span class="badge" id="data-badge">Учебные данные</span><span id="data-info"></span><button id="demo-button" class="text-button">Вернуть учебный пример</button></div>
+    <p id="demo-note" class="data-note">Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите Excel. Цены валют и активов должны быть выражены в рублях.</p>
+    <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+    <div class="workspace">
+      <aside class="control-panel panel">
+        <div class="panel-heading"><h2>Настройки портфеля</h2><span class="small-index">01</span></div>
+        <form id="optimization-form">
+          <label for="mode">Критерий оптимизации</label><select id="mode"><option value="markowitz">Критерий Марковица</option><option value="sharpe" selected>Максимум коэффициента Шарпа</option><option value="risk">Эффективный риск</option><option value="return">Эффективная доходность</option></select>
+          <p id="mode-description" class="field-help"></p>
+          <div class="field" id="lambda-field" hidden><label for="lambda">Неприятие риска λ</label><input id="lambda" type="number" min="0" step="0.1" value="3"></div>
+          <div class="field" id="target-return-field" hidden><label for="target-return">Минимальная доходность, % / год</label><input id="target-return" type="number" step="0.1" value="10"></div>
+          <div class="field" id="target-risk-field" hidden><label for="target-risk">Максимальный риск, % / год</label><input id="target-risk" type="number" min="0" step="0.1" value="20"></div>
+          <div class="field"><label for="capital">Начальный капитал, ₽</label><input id="capital" type="number" min="1" step="1" value="1000000" required></div>
+          <div class="field"><label for="rf">Безрисковая ставка, % / год</label><input id="rf" type="number" min="-99.9" step="0.1" value="8" required><p class="field-help">Номинальная ставка; для Шарпа автоматически корректируется на инфляцию.</p></div>
+          <div class="field"><label for="frequency">Периодичность наблюдений</label><select id="frequency"><option value="12">Месячная · 12 периодов в год</option><option value="252">Дневная · 252 периода в год</option><option value="1">Годовая · 1 период в год</option></select></div>
+          <div class="field"><label for="first-indicator">Индикатор 1</label><select id="first-indicator"><option value="m2">Рублёвая масса М2 / ряд из файла</option><option value="cash">Рублёвый остаток · 0% номинально</option></select><p class="field-help">М2 — макроэкономический показатель. Портфель с его весом является учебной моделью.</p></div>
+          <button class="button primary full" type="submit" id="calculate-button">Рассчитать портфель</button>
+        </form>
+        <div class="constraints"><span>Без коротких продаж</span><strong>Σ весов = 100%</strong><span>Ребалансировка каждый период</span></div>
+      </aside>
+      <section class="results">
+        <div class="result-heading"><div><p class="eyebrow">ТЕКУЩИЙ РЕЗУЛЬТАТ</p><h2 id="current-title">Максимум Шарпа</h2></div><button id="save-button" class="button ghost">Добавить к сравнению</button></div>
+        <div class="metrics-grid">
+          <article class="metric-card featured"><span>Ожидаемый доход за год</span><strong id="expected-income">—</strong><small id="expected-rate">—</small></article>
+          <article class="metric-card"><span>Ожидаемая волатильность</span><strong id="risk-value">—</strong><small>Годовое стандартное отклонение</small></article>
+          <article class="metric-card"><span>Максимальная просадка</span><strong id="drawdown-value">—</strong><small>По исторической кривой</small></article>
+          <article class="metric-card"><span>Макс. период восстановления</span><strong id="recovery-value">—</strong><small id="recovery-note">Завершённые восстановления</small></article>
+        </div>
+        <div class="chart-row">
+          <article class="panel frontier-panel"><div class="panel-heading"><div><h2>Эффективная граница</h2><p>Реальная доходность и годовой риск</p></div><span class="small-index">02</span></div><div id="frontier-chart" class="chart" role="img" aria-label="Эффективная граница и сравниваемые портфели"></div><p class="chart-note">Точки на границе дают минимальный риск для соответствующей доходности.</p></article>
+          <article class="panel weights-panel"><div class="panel-heading"><div><h2>Структура портфеля</h2><p>Доли десяти индикаторов</p></div><span class="small-index">03</span></div><label class="sr-only" for="weights-view">Портфель для диаграммы</label><select id="weights-view"><option value="current">Текущий портфель</option><option value="compare">Сравнить все портфели</option></select><div id="weights-chart" class="chart" role="img" aria-label="Интерактивные круговые диаграммы весов"></div></article>
+        </div>
+        <article class="panel equity-panel"><div class="panel-heading"><div><h2>Кривая доходности портфеля</h2><p>Историческая динамика покупательной способности</p></div><div class="segmented" role="group" aria-label="Вид кривой"><button data-view="wealth" class="active">Капитал, ₽</button><button data-view="return">Доходность, %</button><button data-view="drawdown">Просадка, %</button></div></div><div id="equity-chart" class="chart" role="img" aria-label="Сравнение кривых портфелей"></div><p class="chart-note">Расчёт на той же выборке, что и оптимизация: это историческая иллюстрация, а не проверка прогноза на новых данных.</p></article>
+      </section>
+    </div>
+    <section class="panel comparison-panel"><div class="panel-heading"><div><h2>Сравнение портфелей</h2><p>Сохранённые портфели отображаются вместе на графиках. Флажок управляет видимостью.</p></div><button id="export-button" class="button ghost">Скачать результаты Excel</button></div><div id="comparison-cards" class="comparison-cards"></div><div class="table-scroll"><table id="comparison-table"><caption class="sr-only">Показатели кривых и ожидаемые показатели портфелей</caption><thead><tr><th>Портфель</th><th>Ожид. доходность</th><th>Волатильность</th><th>Шарп</th><th>CAGR</th><th>Истор. доходность</th><th>Макс. просадка</th><th>Восстановление</th><th>Текущее восстановление</th></tr></thead><tbody></tbody></table></div></section>
+    <section class="panel indicators-panel"><div class="panel-heading"><div><h2>Исходные индикаторы</h2><p>Оценки после поправки на инфляцию; веса текущего портфеля</p></div><span class="pill">10 рядов</span></div><div class="table-scroll"><table id="indicators-table"><caption class="sr-only">Десять индикаторов и их показатели</caption><thead><tr><th>№</th><th>Индикатор</th><th>Ожид. доходность / год</th><th>Волатильность / год</th><th>Вес в портфеле</th></tr></thead><tbody></tbody></table></div></section>
+    <footer><span>Портфельная лаборатория · учебный проект</span><span>Все доходности и суммы — в покупательной способности на начало периода.</span></footer>
+  </main>
+  <dialog id="method-dialog"><div class="dialog-heading"><h2>Методика и Excel</h2><button class="button ghost" id="close-method" aria-label="Закрыть методику">Закрыть</button></div><div class="method-content">
+    <h3>Данные</h3><p>Первый лист Excel: «Дата», «ИПЦ», затем ровно 10 индикаторов. Каждая строка — уровни на одну дату, а не готовые доходности. ИПЦ — накопленный индекс цен, например 100, 100,5, 101,2; месячный процент инфляции сначала нужно превратить в индекс. Минимум 13 строк наблюдений, желательно 3–5 лет месячных данных. Без пропусков, повторов дат и неположительных значений.</p><p>Валюты, товары и зарубежные индексы заранее переводятся в рубли. Для активов с выплатами предпочтительны индексы полной доходности. При импорте первый ряд используется как индикатор 1; приложение не проверяет его экономическое содержание. Режим «рублёвый остаток» заменяет его динамику постоянным номинальным уровнем.</p>
+    <h3>Поправка на инфляцию</h3><p class="formula">rᵣₑₐₗ,t = (Pₜ / Pₜ₋₁) / (ИПЦₜ / ИПЦₜ₋₁) − 1</p><p>Для рублёвого остатка Pₜ / Pₜ₋₁ = 1. Ожидаемая годовая доходность μ = k × средняя периодическая реальная доходность. Годовая ковариация Σ = k × выборочная ковариация; k = 12, 252 или 1. Волатильность σ = √(wᵀΣw). Годовая инфляция оценивается геометрически по ИПЦ; реальная безрисковая ставка r𝒇 = (1 + номинальная ставка) / (1 + годовая инфляция) − 1.</p>
+    <h3>Четыре критерия</h3><ul><li><strong>Марковиц:</strong> максимум μᵀw − λwᵀΣw; λ задаёт неприятие риска.</li><li><strong>Шарп:</strong> максимум (μᵀw − r𝒇) / √(wᵀΣw). Если положительный избыток доходности недостижим, приложение сообщает об этом.</li><li><strong>Эффективный риск:</strong> минимум wᵀΣw при μᵀw ≥ заданной доходности.</li><li><strong>Эффективная доходность:</strong> максимум μᵀw при √(wᵀΣw) ≤ лимита риска.</li></ul><p>Во всех режимах wᵢ ≥ 0 и Σwᵢ = 1. Граница строится от портфеля минимальной дисперсии до максимальной доходности. Решатель перебирает допустимые наборы активов, решает квадратичную задачу на каждом и выбирает лучший результат. Для вырожденной ковариации используется малая диагональная регуляризация; отображаемый риск считается по исходной матрице.</p>
+    <h3>Кривая и её показатели</h3><p>V₀ = начальный капитал; Vₜ = Vₜ₋₁ × (1 + Σwᵢrᵢ,ₜ). Веса возвращаются к целевым каждый период. Комиссии и налоги не включены. CAGR = (Vкон / V₀)^(k / T) − 1. Просадка — отклонение от предыдущего максимума капитала. Максимальное завершённое восстановление — число календарных дней от пика до первого возврата к нему. Незавершённое восстановление показывается отдельно, до последней даты.</p><p>Ожидаемый доход за год = начальный капитал × μᵀw; это оценка в реальных рублях. Ожидаемая доходность и исторический CAGR — разные показатели. Оптимизация и историческая кривая используют одни данные; результат не является прогнозом вне выборки. При дневной периодичности используются 252 торговых периода, при годовой — 1.</p>
+    <h3>Рублёвая масса</h3><p>По определению Банка России М2 включает наличные рубли вне банковской системы и рублёвые средства резидентов на банковских счетах. Рост М2 — динамика макропоказателя, а не доходность покупаемого актива. Его включение в портфель предусмотрено для учебного задания.</p><p><a href="https://www.cbr.ru/statistics/macro_itm/dkfs/methodological_commentary_ms/" target="_blank" rel="noopener">Определение М2 · Банк России</a> · <a href="https://www.cvxgrp.org/cvx_short_course/docs/applications/notebooks/portfolio_optimization.html" target="_blank" rel="noopener">Модель оптимизации портфеля · CVX Group</a></p>
+  </div></dialog>
+</body>
+</html>

@@ -1,0 +1,68 @@
+import {test,expect} from '@playwright/test';
+import XLSX from 'xlsx';
+import {readFile} from 'node:fs/promises';
+test('four criteria, chart comparison, errors and Excel roundtrip',async({page},testInfo)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('/');
+  await expect(page.locator('#current-title')).toHaveText('Максимум Шарпа');
+  await expect(page.locator('#indicators-table tbody tr')).toHaveCount(10);
+  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(2);
+  await expect(page.locator('#equity-chart svg')).toBeVisible();
+  await expect(page.locator('#message')).toBeHidden();
+  await page.screenshot({path:testInfo.outputPath('desktop.png'),fullPage:true});
+  for(const mode of ['markowitz','sharpe','risk','return']) {
+    await page.selectOption('#mode',mode);
+    await page.click('#calculate-button');
+    await expect(page.locator('#calculate-button')).toBeEnabled();
+    await expect(page.locator('#current-title')).toHaveText({markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность'}[mode]);
+    await expect(page.locator('#message')).not.toHaveClass(/error/);
+    await page.click('#save-button');
+  }
+  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(6);
+  await page.selectOption('#weights-view','compare');
+  await expect(page.locator('#weights-chart svg')).toBeVisible();
+  await page.locator('[data-view="drawdown"]').click();
+  await expect(page.locator('[data-view="drawdown"]')).toHaveClass('active');
+  const previous=await page.locator('#risk-value').textContent();
+  await page.selectOption('#mode','return');await page.fill('#target-risk','0');await page.click('#calculate-button');
+  await expect(page.locator('#message')).toHaveClass(/error/);
+  await expect(page.locator('#risk-value')).toHaveText(previous);
+  await page.selectOption('#mode','markowitz');
+  await page.selectOption('#first-indicator','cash');await page.click('#calculate-button');
+  await expect(page.locator('#comparison-cards .portfolio-chip')).toHaveCount(0);
+  await expect(page.locator('#indicators-table')).toContainText('Рублёвый остаток');
+  await page.click('#demo-button');
+  const downloadPromise=page.waitForEvent('download');await page.click('#template-button');const download=await downloadPromise;
+  const file=testInfo.outputPath('template.xlsx');await download.saveAs(file);
+  await page.locator('#file-input').setInputFiles(file);
+  await expect(page.locator('#data-badge')).toHaveText('Ваш Excel');
+  await expect(page.locator('#current-title')).toHaveText('Марковиц');
+  await expect(page.locator('#message')).not.toHaveClass(/error/);
+  const exportPromise=page.waitForEvent('download');await page.click('#export-button');const exported=await exportPromise;
+  const output=testInfo.outputPath('results.xlsx');await exported.saveAs(output);const workbook=XLSX.read(await readFile(output),{type:'buffer'});
+  expect(workbook.SheetNames).toEqual(['Показатели','Веса','Реальный капитал','Просадки','Эффективная граница','Исходные данные','Реальные доходности','Методика']);
+  const weights=XLSX.utils.sheet_to_json(workbook.Sheets['Веса'],{header:1}).slice(1).reduce((s,r)=>s+r[1],0);expect(weights).toBeCloseTo(1,8);
+  const bad=XLSX.utils.book_new();XLSX.utils.book_append_sheet(bad,XLSX.utils.aoa_to_sheet([['Дата','ИПЦ'],['2020-01-31',100]]),'Данные');
+  await page.locator('#file-input').setInputFiles({name:'bad.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(XLSX.write(bad,{type:'buffer',bookType:'xlsx'}))});
+  await expect(page.locator('#message')).toHaveClass(/error/);await expect(page.locator('#indicators-table tbody tr')).toHaveCount(10);
+  await page.click('#method-button');await expect(page.locator('#method-dialog')).toBeVisible();await page.keyboard.press('Escape');await expect(page.locator('#method-dialog')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+test('mobile charts and controls fit the viewport',async({page},testInfo)=>{
+  await page.setViewportSize({width:390,height:844});await page.goto('/');
+  await expect(page.locator('#expected-income')).not.toHaveText('—');
+  await page.selectOption('#weights-view','compare');
+  await page.screenshot({path:testInfo.outputPath('mobile.png'),fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+  await page.click('#save-button');await expect(page.locator('#comparison-table tbody tr')).toHaveCount(3);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+});
+test('WebMCP contract uses shared state and rejects invalid inputs',async({page})=>{
+  await page.addInitScript(()=>{window.registeredTools={};Object.defineProperty(document,'modelContext',{value:{registerTool(tool){window.registeredTools[tool.name]=tool;}}});});
+  await page.goto('/');await expect(page.locator('#expected-income')).not.toHaveText('—');
+  const names=await page.evaluate(()=>Object.keys(window.registeredTools));expect(names).toHaveLength(3);
+  const result=await page.evaluate(()=>window.registeredTools.calculate_portfolio.execute({criterion:'markowitz'}));expect(result.name).toBe('Марковиц');await expect(page.locator('#current-title')).toHaveText('Марковиц');
+  const invalid=await page.evaluate(()=>{try{window.registeredTools.calculate_portfolio.execute({criterion:'invalid'});return false;}catch{return true;}});expect(invalid).toBeTruthy();
+  const p=await page.evaluate(()=>window.registeredTools.save_portfolio_for_comparison.execute({}));expect(p.id).toBeTruthy();
+  const read=await page.evaluate(()=>window.registeredTools.read_portfolio_analysis.execute({}));expect(read.compared).toHaveLength(2);expect(read.current.weights.reduce((s,x)=>s+x,0)).toBeCloseTo(1,8);
+});

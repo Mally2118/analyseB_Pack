@@ -1,0 +1,6 @@
+node_modules/
+.sites-runtime/
+*.tar.gz
+*.log
+test-results/
+playwright-report/
