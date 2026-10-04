@@ -1,0 +1,322 @@
+// Russian source strings are stable translation keys; user-provided names stay unchanged.
+const english = {
+  'Портфельная': 'Portfolio',
+  'лаборатория': 'Lab',
+  'Бизнес-аналитика и прогнозирование': 'Business analytics and forecasting',
+  'Портфельная лаборатория — бизнес-аналитика и прогнозирование': 'Portfolio Lab — business analytics and forecasting',
+  'Оптимизация десяти индикаторов по Марковицу и Шарпу, эффективная граница и сравнение реальной доходности портфелей.': 'Optimize ten indicators using Markowitz and Sharpe criteria, explore the efficient frontier and compare inflation-adjusted portfolio returns.',
+  'Методика расчёта': 'Methodology',
+  'АНАЛИЗ ПОРТФЕЛЯ / 10 ИНДИКАТОРОВ': 'PORTFOLIO ANALYSIS / 10 INDICATORS',
+  'Доходность под контролем.': 'Keep returns in focus.',
+  'Найдите баланс доходности и риска с учётом инфляции.': 'Balance return and risk with inflation taken into account.',
+  'Скачать Excel-шаблон': 'Download Excel template',
+  'Загрузить Excel': 'Upload Excel',
+  'Учебные данные': 'Demo data',
+  'Ваш Excel': 'Your Excel',
+  'Вернуть учебный пример': 'Restore demo data',
+  'Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите Excel. Цены валют и активов должны быть выражены в рублях.': 'Synthetic series illustrate the calculations. Upload Excel to work with historical data. Currency and asset prices must be expressed in rubles.',
+  'Настройки портфеля': 'Portfolio settings',
+  'Критерий оптимизации': 'Optimization criterion',
+  'Критерий Марковица': 'Markowitz criterion',
+  'Максимум коэффициента Шарпа': 'Maximize Sharpe ratio',
+  'Эффективный риск': 'Efficient risk',
+  'Эффективная доходность': 'Efficient return',
+  'Марковиц': 'Markowitz',
+  'Максимум Шарпа': 'Maximum Sharpe',
+  'Максимум доходности с штрафом за риск. Чем выше λ, тем осторожнее портфель.': 'Maximize return with a risk penalty. A higher λ produces a more cautious portfolio.',
+  'Максимум избыточной реальной доходности на единицу риска.': 'Maximize excess real return per unit of risk.',
+  'Минимальный риск при доходности не ниже заданного уровня.': 'Minimize risk while meeting a minimum return target.',
+  'Максимальная доходность при риске не выше заданного лимита.': 'Maximize return while staying within a risk limit.',
+  'Неприятие риска λ': 'Risk aversion λ',
+  'Минимальная доходность, % / год': 'Minimum return, % / year',
+  'Максимальный риск, % / год': 'Maximum risk, % / year',
+  'Начальный капитал, ₽': 'Initial capital, ₽',
+  'Безрисковая ставка, % / год': 'Risk-free rate, % / year',
+  'Номинальная ставка; для Шарпа автоматически корректируется на инфляцию.': 'Nominal rate; automatically adjusted for inflation when calculating Sharpe.',
+  'Периодичность наблюдений': 'Observation frequency',
+  'Месячная · 12 периодов в год': 'Monthly · 12 periods per year',
+  'Дневная · 252 периода в год': 'Daily · 252 periods per year',
+  'Годовая · 1 период в год': 'Annual · 1 period per year',
+  'Индикатор 1': 'Indicator 1',
+  'Рублёвая масса М2 / ряд из файла': 'Ruble money supply M2 / uploaded series',
+  'Рублёвый остаток · 0% номинально': 'Ruble cash balance · 0% nominal',
+  'М2 — макроэкономический показатель. Портфель с его весом является учебной моделью.': 'M2 is a macroeconomic indicator. A portfolio assigning weight to M2 is an educational model.',
+  'Рассчитать портфель': 'Calculate portfolio',
+  'Без коротких продаж': 'No short selling',
+  'Σ весов = 100%': 'Σ weights = 100%',
+  'Ребалансировка каждый период': 'Rebalance each period',
+  'ТЕКУЩИЙ РЕЗУЛЬТАТ': 'CURRENT RESULT',
+  'Добавить к сравнению': 'Add to comparison',
+  'Ожидаемый доход за год': 'Expected annual income',
+  'Ожидаемая волатильность': 'Expected volatility',
+  'Годовое стандартное отклонение': 'Annual standard deviation',
+  'Максимальная просадка': 'Maximum drawdown',
+  'По исторической кривой': 'Based on the historical curve',
+  'Макс. период восстановления': 'Maximum recovery period',
+  'Завершённые восстановления': 'Completed recoveries',
+  'Эффективная граница': 'Efficient frontier',
+  'Реальная доходность и годовой риск': 'Real return and annual risk',
+  'Эффективная граница и сравниваемые портфели': 'Efficient frontier and compared portfolios',
+  'Скачать рисунок SVG': 'Download SVG chart',
+  'Точки на границе дают минимальный риск для соответствующей доходности.': 'Frontier points give the minimum risk for each corresponding return.',
+  'Структура портфеля': 'Portfolio allocation',
+  'Доли десяти индикаторов': 'Weights of ten indicators',
+  'Портфель для диаграммы': 'Portfolio to display',
+  'Текущий портфель': 'Current portfolio',
+  'Сравнить все портфели': 'Compare all portfolios',
+  'Интерактивные круговые диаграммы весов': 'Interactive pie charts of portfolio weights',
+  'Кривая доходности портфеля': 'Portfolio return curve',
+  'Историческая динамика покупательной способности': 'Historical purchasing power',
+  'Вид кривой': 'Curve view',
+  'Капитал, ₽': 'Capital, ₽',
+  'Доходность, %': 'Return, %',
+  'Просадка, %': 'Drawdown, %',
+  'Сравнение кривых портфелей': 'Comparison of portfolio curves',
+  'Расчёт на той же выборке, что и оптимизация: это историческая иллюстрация, а не проверка прогноза на новых данных.': 'Calculated on the same sample used for optimization: a historical illustration, not a forecast evaluated on new data.',
+  'Сравнение портфелей': 'Portfolio comparison',
+  'Сохранённые портфели отображаются вместе на графиках. Флажок управляет видимостью.': 'Saved portfolios appear together on the charts. Use the checkboxes to control visibility.',
+  'Скачать результаты Excel': 'Download Excel results',
+  'Показатели кривых и ожидаемые показатели портфелей': 'Curve statistics and expected portfolio metrics',
+  'Портфель': 'Portfolio',
+  'Ожид. доход, ₽ / год': 'Expected income, ₽ / year',
+  'Ожид. доходность': 'Expected return',
+  'Волатильность': 'Volatility',
+  'Шарп': 'Sharpe',
+  'Истор. доходность': 'Historical return',
+  'Макс. просадка': 'Max. drawdown',
+  'Макс. восстановление': 'Max. recovery',
+  'Завершённое восстановление': 'Completed recovery',
+  'Текущее восстановление': 'Current recovery',
+  'Восстановление измеряется календарными днями от пика до возврата к нему. Знак ≥ означает, что возврат ещё не произошёл и показана нижняя граница срока.': 'Recovery is measured in calendar days from the peak until it is regained. The ≥ sign indicates an ongoing recovery and a lower bound on its duration.',
+  'Исходные индикаторы': 'Source indicators',
+  'Оценки после поправки на инфляцию; веса текущего портфеля': 'Inflation-adjusted estimates; current portfolio weights',
+  '10 рядов': '10 series',
+  'Десять индикаторов и их показатели': 'Ten indicators and their metrics',
+  'Индикатор': 'Indicator',
+  'Ожид. доходность / год': 'Expected return / year',
+  'Волатильность / год': 'Volatility / year',
+  'Вес в портфеле': 'Portfolio weight',
+  'Портфельная лаборатория · учебный проект': 'Portfolio Lab · educational project',
+  'Все доходности и суммы — в покупательной способности на начало периода.': 'All returns and amounts are expressed in purchasing power at the start of the period.',
+  'Методика и Excel': 'Methodology and Excel',
+  'Закрыть методику': 'Close methodology',
+  'Закрыть': 'Close',
+  'Данные': 'Data',
+  'Первый лист Excel: «Дата», «ИПЦ», затем ровно 10 индикаторов. Каждая строка — уровни на одну дату, а не готовые доходности. ИПЦ — накопленный индекс цен, например 100, 100,5, 101,2; месячный процент инфляции сначала нужно превратить в индекс. Минимум 13 строк наблюдений, желательно 3–5 лет месячных данных. Без пропусков, повторов дат и неположительных значений.': 'The first Excel sheet must contain Date, CPI, then exactly 10 indicators. Each row contains levels for one date, not precomputed returns. CPI is a cumulative price index, e.g. 100, 100.5, 101.2; convert monthly inflation percentages to an index first. At least 13 observations are required; preferably use 3–5 years of monthly data. No missing values, duplicate dates or nonpositive levels.',
+  'Валюты, товары и зарубежные индексы заранее переводятся в рубли. Для активов с выплатами предпочтительны индексы полной доходности. При импорте первый ряд используется как индикатор 1; приложение не проверяет его экономическое содержание. Режим «рублёвый остаток» заменяет его динамику постоянным номинальным уровнем.': 'Convert currencies, commodities and foreign indices to rubles before importing. For assets with distributions, use total return indices where possible. The first series becomes indicator 1; the application does not verify its economic meaning. The ruble cash balance mode replaces its dynamics with a constant nominal level.',
+  'Поправка на инфляцию': 'Inflation adjustment',
+  'rᵣₑₐₗ,t = (Pₜ / Pₜ₋₁) / (ИПЦₜ / ИПЦₜ₋₁) − 1': 'rᵣₑₐₗ,t = (Pₜ / Pₜ₋₁) / (CPIₜ / CPIₜ₋₁) − 1',
+  'Для рублёвого остатка Pₜ / Pₜ₋₁ = 1. Ожидаемая годовая доходность μ = k × средняя периодическая реальная доходность. Годовая ковариация Σ = k × выборочная ковариация; k = 12, 252 или 1. Волатильность σ = √(wᵀΣw). Годовая инфляция оценивается геометрически по ИПЦ; реальная безрисковая ставка r𝒇 = (1 + номинальная ставка) / (1 + годовая инфляция) − 1.': 'For ruble cash, Pₜ / Pₜ₋₁ = 1. Expected annual return μ = k × mean periodic real return. Annual covariance Σ = k × sample covariance; k = 12, 252 or 1. Volatility σ = √(wᵀΣw). Annual inflation is estimated geometrically from CPI; the real risk-free rate r𝒇 = (1 + nominal rate) / (1 + annual inflation) − 1.',
+  'Четыре критерия': 'Four criteria',
+  'Марковиц:': 'Markowitz:',
+  'максимум μᵀw − λwᵀΣw; λ задаёт неприятие риска.': 'maximize μᵀw − λwᵀΣw; λ controls risk aversion.',
+  'Шарп:': 'Sharpe:',
+  'максимум (μᵀw − r𝒇) / √(wᵀΣw). Если положительный избыток доходности недостижим, приложение сообщает об этом.': 'maximize (μᵀw − r𝒇) / √(wᵀΣw). The application reports when positive excess return is unattainable.',
+  'Эффективный риск:': 'Efficient risk:',
+  'минимум wᵀΣw при μᵀw ≥ заданной доходности.': 'minimize wᵀΣw subject to μᵀw ≥ target return.',
+  'Эффективная доходность:': 'Efficient return:',
+  'максимум μᵀw при √(wᵀΣw) ≤ лимита риска.': 'maximize μᵀw subject to √(wᵀΣw) ≤ the risk limit.',
+  'Во всех режимах wᵢ ≥ 0 и Σwᵢ = 1. Граница строится от портфеля минимальной дисперсии до максимальной доходности. Решатель перебирает допустимые наборы активов, решает квадратичную задачу на каждом и выбирает лучший результат. Для вырожденной ковариации используется малая диагональная регуляризация; отображаемый риск считается по исходной матрице.': 'All modes require wᵢ ≥ 0 and Σwᵢ = 1. The frontier runs from the minimum variance portfolio to maximum return. The solver enumerates feasible asset subsets, solves the quadratic problem for each and selects the best result. Singular covariance matrices use a small diagonal regularization; displayed risk uses the original matrix.',
+  'Кривая и её показатели': 'Curve and its metrics',
+  'V₀ = начальный капитал; Vₜ = Vₜ₋₁ × (1 + Σwᵢrᵢ,ₜ). Веса возвращаются к целевым каждый период. Комиссии и налоги не включены. CAGR = (Vкон / V₀)^(k / T) − 1. Просадка — отклонение от предыдущего максимума капитала. Максимальное завершённое восстановление — число календарных дней от пика до первого возврата к нему. Незавершённое восстановление измеряется до последней даты. Максимальный период берётся по завершённым и текущему восстановлению; если текущее является самым длинным, показатель отмечается знаком ≥ как нижняя граница срока.': 'V₀ = initial capital; Vₜ = Vₜ₋₁ × (1 + Σwᵢrᵢ,ₜ). Weights are reset to target values each period. Fees and taxes are excluded. CAGR = (Vfinal / V₀)^(k / T) − 1. Drawdown is the decline from the previous capital peak. Maximum completed recovery is measured in calendar days from the peak to its first recovery. An ongoing recovery is measured through the last date. The maximum includes both completed and ongoing recoveries; if the ongoing one is longest, ≥ marks a lower bound on its duration.',
+  'Ожидаемый доход за год = начальный капитал × μᵀw; это оценка в реальных рублях. Ожидаемая доходность и исторический CAGR — разные показатели. Оптимизация и историческая кривая используют одни данные; результат не является прогнозом вне выборки. При дневной периодичности используются 252 торговых периода, при годовой — 1.': 'Expected annual income = initial capital × μᵀw, estimated in real rubles. Expected return and historical CAGR are different metrics. Optimization and the historical curve use the same data; this is not an out-of-sample forecast. Daily observations use 252 trading periods per year; annual observations use 1.',
+  'Рублёвая масса': 'Ruble money supply',
+  'По определению Банка России М2 включает наличные рубли вне банковской системы и рублёвые средства резидентов на банковских счетах. Рост М2 — динамика макропоказателя, а не доходность покупаемого актива. Его включение в портфель предусмотрено для учебного задания.': 'The Bank of Russia defines M2 as ruble cash outside the banking system and residents’ ruble funds in bank accounts. M2 growth describes a macroeconomic indicator rather than the return of a tradable asset. Its inclusion is required by the educational assignment.',
+  'Определение М2 · Банк России': 'M2 definition · Bank of Russia',
+  'Модель оптимизации портфеля · CVX Group': 'Portfolio optimization model · CVX Group',
+  'Язык интерфейса': 'Interface language',
+  'Переключить на английский': 'Switch to English',
+  'Переключить на русский': 'Switch to Russian',
+  'Тёмная тема': 'Dark theme',
+  'Светлая тема': 'Light theme',
+  'дн.': 'days',
+  'наблюдений': 'observations',
+  'инфляция': 'inflation',
+  '/ год': '/ year',
+  'реальной доходности / год': 'real return / year',
+  'Возврат к пику ещё не произошёл': 'The previous peak has not yet been regained',
+  'Текущее восстановление:': 'Current recovery:',
+  'По завершённым восстановлениям': 'Based on completed recoveries',
+  'Источник:': 'Source:',
+  '. Все ряды скорректированы на ИПЦ из файла; экономическое содержание и рублёвые единицы проверьте по своим источникам.': '. All series are adjusted using the file’s CPI; verify their economic meaning and ruble units against your sources.',
+  'Добавьте текущий портфель, чтобы сравнить его с результатами других критериев.': 'Add the current portfolio to compare it with other criteria.',
+  'Показать {name} на графиках': 'Show {name} on the charts',
+  'Удалить {name}': 'Remove {name}',
+  ' · текущий': ' · current',
+  'Не определён': 'Undefined',
+  'Риск:': 'Risk:',
+  'Доходность:': 'Return:',
+  'Риск, % / год': 'Risk, % / year',
+  'Доходность, % / год': 'Return, % / year',
+  'тыс.': 'k',
+  'капитала': 'of capital',
+  ' · цель ': ' · target ',
+  ' · риск ≤ ': ' · risk ≤ ',
+  'Портфель рассчитан. При смене периодичности или первого индикатора сравнение очищено.': 'Portfolio calculated. Changing the frequency or first indicator clears the comparison.',
+  'Портфель рассчитан. Добавьте результат к сравнению, затем выберите другой критерий.': 'Portfolio calculated. Add it to the comparison, then choose another criterion.',
+  'Портфель «{name}» добавлен. Выберите другой критерий и рассчитайте следующий.': 'Portfolio “{name}” added. Choose another criterion and calculate the next portfolio.',
+  'Рисунок сохранён в SVG. Его можно вставить в отчёт или презентацию.': 'Chart saved as SVG. You can insert it into a report or presentation.',
+  'Excel-шаблон скачан. На первом листе замените учебные уровни своими данными.': 'Excel template downloaded. Replace the demo levels on the first sheet with your data.',
+  'Excel загружен: {count} наблюдений, 10 индикаторов. Сравнение очищено; начальный расчёт выполнен по Марковицу с λ = 3.': 'Excel uploaded: {count} observations, 10 indicators. Comparison cleared; the initial calculation uses Markowitz with λ = 3.',
+  'Показатели, веса, кривые и исходные данные сохранены в Excel. Доходности в файле записаны долями: 0,1 = 10%.': 'Metrics, weights, curves and source data saved to Excel. Returns are stored as fractions: 0.1 = 10%.',
+  'Учебные данные восстановлены.': 'Demo data restored.',
+  'Рублёвая масса М2': 'Ruble money supply M2',
+  'Рублёвый остаток': 'Ruble cash balance',
+  'Золото': 'Gold',
+  'Доллар США': 'US dollar',
+  'Евро': 'Euro',
+  'Юань': 'Chinese yuan',
+  'Индекс Мосбиржи': 'MOEX Index',
+  'ОФЗ / RGBITR': 'Government bonds / RGBITR',
+  'Нефть Brent': 'Brent crude oil',
+  'Серебро': 'Silver',
+  'Индекс S&P 500': 'S&P 500 Index',
+  'Учебный пример · синтетические данные': 'Demo example · synthetic data',
+  'Заполните числовой параметр: ': 'Enter a numeric value: ',
+  'Начальный капитал должен быть больше нуля и не превышать 10¹⁵ ₽.': 'Initial capital must be positive and no greater than 10¹⁵ ₽.',
+  'Безрисковая ставка должна быть выше −100%.': 'The risk-free rate must be above −100%.',
+  'Можно сравнивать до 8 сохранённых портфелей. Удалите один, чтобы добавить новый.': 'You can compare up to 8 saved portfolios. Remove one to add another.',
+  'Сначала рассчитайте портфель.': 'Calculate a portfolio first.',
+  'Выберите файл .xlsx или .xls.': 'Choose an .xlsx or .xls file.',
+  'Файл должен быть не больше 10 МБ.': 'The file must be no larger than 10 MB.',
+  'В файле нет листов.': 'The file contains no sheets.',
+  'Не удалось выполнить действие.': 'Unable to complete the action.',
+  'Не загрузились библиотеки графиков или Excel. Перезапустите приложение.': 'The chart or Excel library could not be loaded. Reload the application.',
+  'Дата должна быть датой Excel или строкой ГГГГ-ММ-ДД.': 'A date must be an Excel date or a YYYY-MM-DD string.',
+  'Нужно минимум 13 наблюдений уровней (12 периодов доходности).': 'At least 13 level observations (12 return periods) are required.',
+  'Максимум 5000 наблюдений.': 'A maximum of 5000 observations is allowed.',
+  'Ожидаются 12 столбцов: Дата, ИПЦ и ровно 10 индикаторов.': 'Expected 12 columns: Date, CPI and exactly 10 indicators.',
+  'Первые два заголовка должны быть «Дата» и «ИПЦ».': 'The first two headers must be Date and CPI (or Дата and ИПЦ).',
+  'Имена десяти индикаторов должны быть уникальными, непустыми, до 80 символов.': 'The ten indicator names must be unique, nonempty and at most 80 characters long.',
+  'Даты должны строго возрастать, без повторов.': 'Dates must be strictly increasing with no duplicates.',
+  'Нужно не менее 13 наблюдений.': 'At least 13 observations are required.',
+  'Неизвестная периодичность.': 'Unknown observation frequency.',
+  'Для месячных данных требуется один ряд на каждый последовательный месяц.': 'Monthly data must contain one row for each consecutive month.',
+  'Для годовых данных нужны последовательные годы.': 'Annual data must cover consecutive years.',
+  'В дневных данных обнаружен разрыв более 7 дней. Проверьте периодичность.': 'Daily data contains a gap longer than 7 days. Check the frequency.',
+  'Изменения уровней слишком велики для устойчивого расчёта. Проверьте числа и единицы измерения.': 'Level changes are too large for stable calculations. Check the numbers and units.',
+  'Не удалось оценить ковариацию: проверьте масштаб чисел.': 'Unable to estimate covariance: check the scale of the numbers.',
+  'Не удалось построить портфель. Проверьте входные данные.': 'Unable to construct a portfolio. Check the input data.',
+  'Целевая доходность недостижима при весах от 0 до 100%.': 'The target return is unattainable with weights between 0% and 100%.',
+  'Проверьте числовые параметры.': 'Check the numeric parameters.',
+  'Ни один индикатор не превышает безрисковую ставку. Портфель с положительным коэффициентом Шарпа недостижим.': 'No indicator exceeds the risk-free rate. A portfolio with a positive Sharpe ratio is unattainable.',
+  'Неизвестный критерий.': 'Unknown criterion.',
+  'Веса должны быть неотрицательными и в сумме равняться 100%.': 'Weights must be nonnegative and sum to 100%.',
+  'Капитал и ставка должны быть конечными числами; капитал должен быть больше нуля.': 'Capital and rate must be finite numbers; capital must be positive.',
+  'Исторический капитал выходит за допустимый числовой диапазон. Проверьте уровни индикаторов.': 'Historical capital exceeds the supported numeric range. Check indicator levels.',
+  'Показатели выходят за допустимый числовой диапазон. Проверьте исходные уровни и периодичность.': 'Metrics exceed the supported numeric range. Check source levels and observation frequency.',
+  'Дата': 'Date',
+  'ИПЦ': 'CPI',
+  'Инструкция': 'Instructions',
+  'Памятка': 'Notes',
+  'Это синтетические данные, а не исторические котировки. Замените их своими рядами.': 'These are synthetic data, not historical quotes. Replace them with your own series.',
+  'Первый лист: Дата, ИПЦ и ровно 10 индикаторов. Уровни положительны; даты строго возрастают.': 'First sheet: Date, CPI and exactly 10 indicators. Levels must be positive and dates strictly increasing.',
+  'ИПЦ — накопленный индекс цен (например 100, 100.5), не месячный процент инфляции.': 'CPI is a cumulative price index (e.g. 100, 100.5), not a monthly inflation percentage.',
+  'Одна строка на конец каждого месяца; минимум 13 строк. Можно выбрать дневную или годовую частоту в приложении.': 'One row per month-end; at least 13 rows. Daily and annual frequencies are also available in the application.',
+  'Все котировки и цены активов предварительно переведите в рубли. Для выплат используйте полную доходность.': 'Convert all quotes and asset prices to rubles first. Use total return series for assets with distributions.',
+  'Индикатор 1 — рублёвая масса М2. Его вес имеет учебную интерпретацию.': 'Indicator 1 is ruble money supply M2. Its weight has an educational interpretation.',
+  'Введите реальные источники, единицы и описание выборки для вашей работы.': 'Document the actual sources, units and sample for your assignment.',
+  'Шаблон_10_индикаторов.xlsx': 'Template_10_indicators.xlsx',
+  'Сравнение_портфелей.xlsx': 'Portfolio_comparison.xlsx',
+  'Эффективная_граница': 'Efficient_frontier',
+  'Веса_портфелей': 'Portfolio_weights',
+  'Капитал_портфелей': 'Portfolio_capital',
+  'Доходность_портфелей': 'Portfolio_returns',
+  'Просадки_портфелей': 'Portfolio_drawdowns',
+  'Ожидаемая доходность / год': 'Expected return / year',
+  'Историческая доходность': 'Historical return',
+  'Макс. завершённое восстановление, дни': 'Max. completed recovery, days',
+  'Текущее восстановление, дни': 'Current recovery, days',
+  'Ожидаемый реальный доход, ₽': 'Expected real income, ₽',
+  'Макс. период восстановления, дни': 'Max. recovery period, days',
+  'Максимальное восстановление незавершено': 'Longest recovery is ongoing',
+  'Да': 'Yes',
+  'Нет': 'No',
+  'Показатели': 'Metrics',
+  'Веса': 'Weights',
+  'Реальный капитал': 'Real capital',
+  'Просадки': 'Drawdowns',
+  'Риск / год': 'Risk / year',
+  'Исходные данные': 'Source data',
+  'Реальные доходности': 'Real returns',
+  'Методика': 'Methodology',
+  'Параметр': 'Parameter',
+  'Значение': 'Value',
+  'Источник': 'Source',
+  'Синтетические данные': 'Synthetic data',
+  'Периодов в год': 'Periods per year',
+  'Номинальная ставка': 'Nominal rate',
+  'Реальная безрисковая ставка': 'Real risk-free rate',
+  'Годовая инфляция': 'Annual inflation',
+  'Формула доходности': 'Return formula',
+  '(P_t/P_(t-1))/(ИПЦ_t/ИПЦ_(t-1))-1': '(P_t/P_(t-1))/(CPI_t/CPI_(t-1))-1',
+  'Ожидаемая доходность': 'Expected return',
+  'Частота × средняя периодическая доходность': 'Frequency × mean periodic return',
+  'Ковариация': 'Covariance',
+  'Частота × выборочная ковариация': 'Frequency × sample covariance',
+  'Ребалансировка': 'Rebalancing',
+  'Каждый период, без комиссий и налогов': 'Each period, excluding fees and taxes',
+  'Проверка прогноза': 'Forecast validation',
+  'Кривая построена на обучающей выборке; вневыборочной проверки нет': 'The curve uses the training sample; no out-of-sample validation',
+  'Критерий: ': 'Criterion: '
+};
+
+function preference(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
+}
+export let language = preference('portfolio-language', 'ru') === 'en' ? 'en' : 'ru';
+export let theme = preference('portfolio-theme', 'light') === 'dark' ? 'dark' : 'light';
+export const locale = () => language === 'en' ? 'en-GB' : 'ru-RU';
+export function t(source, values = {}) {
+  source = String(source ?? '');
+  const key = source.trim();
+  const text = language === 'en' ? english[source] ?? (english[key] ? source.replace(key, english[key]) : source) : source;
+  return text.replace(/\{(\w+)\}/g, (match, key) => values[key] ?? match);
+}
+export function setLanguage(value) {
+  language = value === 'en' ? 'en' : 'ru';
+  try { localStorage.setItem('portfolio-language', language); } catch { /* Optional storage. */ }
+  document.documentElement.lang = language;
+}
+export function setTheme(value) {
+  theme = value === 'dark' ? 'dark' : 'light';
+  try { localStorage.setItem('portfolio-theme', theme); } catch { /* Optional storage. */ }
+  document.documentElement.dataset.theme = theme;
+}
+
+const staticText = [], staticAttributes = [];
+export function captureStaticTranslations() {
+  const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentElement.closest('script,style')) continue;
+    if (/[А-Яа-яЁё]/.test(node.textContent)) staticText.push([node, node.textContent]);
+  }
+  for (const element of document.querySelectorAll('[aria-label],[title],meta[name="description"]')) {
+    for (const attribute of ['aria-label', 'title', 'content']) {
+      const source = element.getAttribute(attribute);
+      if (source && /[А-Яа-яЁё]/.test(source)) staticAttributes.push([element, attribute, source]);
+    }
+  }
+}
+export function translateStatic() {
+  for (const [node, source] of staticText) {
+    const key = source.trim();
+    node.textContent = source.replace(key, t(key));
+  }
+  for (const [element, attribute, source] of staticAttributes) element.setAttribute(attribute, t(source));
+  document.documentElement.lang = language;
+}
+export function translateError(source) {
+  if (language === 'ru') return source;
+  if (english[source]) return english[source];
+  return source
+    .replace(/^Неверный формат даты: (.*)\. Используйте ГГГГ-ММ-ДД\.$/, 'Invalid date format: $1. Use YYYY-MM-DD.')
+    .replace(/^Некорректная дата: (.*)\.$/, 'Invalid date: $1.')
+    .replace(/^Лимит риска ниже минимально достижимого \((.*)%\)\.$/, 'Risk limit is below the minimum achievable ($1%).')
+    .replace(/^Строка (\d+), /, 'Row $1, ')
+    .replace(/^Заполните числовой параметр: /, 'Enter a numeric value: ')
+    .replace(/, ИПЦ:/, ', CPI:')
+    .replace(/: отсутствует числовое значение\.$/, ': missing numeric value.')
+    .replace(/: требуется положительное конечное число\.$/, ': a positive finite number is required.');
+}

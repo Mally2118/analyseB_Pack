@@ -4,12 +4,13 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Портфельная лаборатория — бизнес-аналитика и прогнозирование</title>
   <meta name="description" content="Оптимизация десяти индикаторов по Марковицу и Шарпу, эффективная граница и сравнение реальной доходности портфелей.">
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('portfolio-theme')==='dark'?'dark':'light';}catch{document.documentElement.dataset.theme='light';}</script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css">
   <script defer src="vendor/echarts.min.js"></script><script defer src="vendor/xlsx.full.min.js"></script>
   <script type="module" src="app.js"></script>
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="#"><span class="brand-icon">∑</span><span>Портфельная<span class="brand-light"> лаборатория</span></span></a><span class="course">Бизнес-аналитика и прогнозирование</span><button class="button ghost" id="method-button">Методика расчёта</button></header>
+  <header class="topbar"><a class="brand" href="#"><span class="brand-icon">∑</span><span>Портфельная<span class="brand-light"> лаборатория</span></span></a><span class="course">Бизнес-аналитика и прогнозирование</span><div class="preferences"><button class="button ghost" id="language-button" type="button" aria-label="Переключить на английский">EN</button><button class="button ghost" id="theme-button" type="button" aria-pressed="false">☾ Тёмная тема</button><button class="button ghost" id="method-button" type="button">Методика расчёта</button></div></header>
   <main>
     <div class="page-heading"><div><p class="eyebrow">АНАЛИЗ ПОРТФЕЛЯ / 10 ИНДИКАТОРОВ</p><h1>Доходность под контролем.</h1><p class="subtitle">Найдите баланс доходности и риска с учётом инфляции.</p></div><div class="heading-actions"><button class="button ghost" id="template-button">Скачать Excel-шаблон</button><label class="button primary" for="file-input">Загрузить Excel</label><input type="file" id="file-input" accept=".xlsx,.xls" hidden></div></div>
     <div class="dataset-strip"><span class="badge" id="data-badge">Учебные данные</span><span id="data-info"></span><button id="demo-button" class="text-button">Вернуть учебный пример</button></div>
