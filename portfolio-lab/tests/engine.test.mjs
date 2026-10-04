@@ -74,3 +74,30 @@ test('independent random feasible portfolios never beat optimized objectives',()
     assert.ok((sharpe.return-rf)/sharpe.risk>=(ret-rf)/risk-1e-7);
   }
 });
+
+test('known wealth path has correct annual return, volatility and unfinished maximum recovery',()=>{
+  const levels=[100,80,100,90,81,81,81,81,81,81,81,81,81];
+  const rows=levels.map((v,i)=>({date:new Date(Date.UTC(2020,i+1,0)).toISOString().slice(0,10),cpi:100,values:Array(10).fill(v)}));
+  const m=estimate({names:demo.names,rows}),s=metrics(m,Array(10).fill(.1),0,1000000);
+  close(s.expectedReturn,-.15);close(s.expectedIncome,-150000);
+  close(s.risk,Math.sqrt((.1225-12*.0125**2)/11*12));
+  close(s.cagr,-.19);close(s.totalReturn,-.19);close(s.maxDrawdown,-.2);
+  assert.equal(s.longestRecovery,60);assert.equal(s.openRecovery,306);assert.equal(s.maxRecovery,306);assert.equal(s.recoveryIncomplete,true);
+});
+test('completed maximum recovery remains exact when an ongoing episode is shorter',()=>{
+  const returns=[-.2,.1,1/.88-1,-.1,-.1];
+  const m={returns:returns.map(r=>Array(10).fill(r)),mu:Array(10).fill(.1),cov:Array.from({length:10},()=>Array(10).fill(.01)),frequency:12,dates:['2020-01-31','2020-02-29','2020-03-31','2020-04-30','2020-05-31','2020-06-30']};
+  const s=metrics(m,Array(10).fill(.1));
+  assert.equal(s.maxRecovery,90);assert.equal(s.recoveryIncomplete,false);assert.equal(s.openRecovery,61);
+});
+test('numerical overflow is rejected instead of producing infinite curves',()=>{
+  const m={returns:Array.from({length:100},()=>Array(10).fill(1e10)),mu:Array(10).fill(.1),cov:Array.from({length:10},()=>Array(10).fill(.01)),frequency:12,dates:Array(101).fill('2020-01-01')};
+  assert.throws(()=>metrics(m,Array(10).fill(.1)),/числовой диапазон/);
+  assert.throws(()=>metrics(model,Array(10).fill(.1),0,Infinity),/конечными/);
+});
+test('import limit is exactly 5000 observations and missing header cells are rejected',()=>{
+  const table=[['Дата','ИПЦ',...demo.names],...Array.from({length:5000},(_,i)=>[new Date(Date.UTC(1900,i,1)).toISOString().slice(0,10),100,...Array(10).fill(100)])];
+  assert.equal(parseTable(table).rows.length,5000);
+  table.push(['2500-01-01',100,...Array(10).fill(100)]);assert.throws(()=>parseTable(table),/5000/);
+  const missing=[['Дата','ИПЦ',...demo.names],...demo.rows.map(r=>[r.date,r.cpi,...r.values])];delete missing[0][3];assert.throws(()=>parseTable(missing),/непустыми/);
+});

@@ -40,11 +40,11 @@ export function parseDate(value) {
 export function parseTable(table) {
   const clean=table.filter(row=>row.some(v=>v!==null&&v!==undefined&&v!==''));
   if(clean.length<14) throw Error('Нужно минимум 13 наблюдений уровней (12 периодов доходности).');
-  if(clean.length>5002) throw Error('Максимум 5000 наблюдений.');
+  if(clean.length>5001) throw Error('Максимум 5000 наблюдений.');
   const headers=clean[0];
   if(headers.length!==12 || clean.slice(1).some(r=>r.length>12)) throw Error('Ожидаются 12 столбцов: Дата, ИПЦ и ровно 10 индикаторов.');
   if(!/^(дата|date)$/i.test(String(headers[0]).trim())||!/^(ипц|cpi)$/i.test(String(headers[1]).trim())) throw Error('Первые два заголовка должны быть «Дата» и «ИПЦ».');
-  const names=headers.slice(2).map(v=>String(v??'').trim());
+  const names=Array.from(headers.slice(2),v=>String(v??'').trim());
   if(names.some(n=>!n||n.length>80)||new Set(names).size!==10) throw Error('Имена десяти индикаторов должны быть уникальными, непустыми, до 80 символов.');
   const number=(value,label)=>{
     const s=typeof value==='string'?value.trim().replace(/\s/g,'').replace(',','.'):value;
@@ -157,8 +157,10 @@ export function createOptimizer(model) {
 
 export function metrics(model,weights,rf=0,capital=1000000) {
   if(weights.length!==10||weights.some(v=>!Number.isFinite(v)||v<0)||Math.abs(weights.reduce((s,v)=>s+v,0)-1)>1e-6) throw Error('Веса должны быть неотрицательными и в сумме равняться 100%.');
+  if(!Number.isFinite(capital)||capital<=0||!Number.isFinite(rf))throw Error('Капитал и ставка должны быть конечными числами; капитал должен быть больше нуля.');
   const r=model.returns.map(row=>dot(row,weights));
   const wealth=[1];r.forEach(v=>wealth.push(wealth.at(-1)*(1+v)));
+  if(wealth.some(v=>!Number.isFinite(v)||v<=0||!Number.isFinite(v*capital)))throw Error('Исторический капитал выходит за допустимый числовой диапазон. Проверьте уровни индикаторов.');
   let peak=1,peakIndex=0,maxDrawdown=0,longestRecovery=0,underwater=false;
   const drawdown=wealth.map((v,i)=>{
     if(v>=peak*(1-1e-12)) {
@@ -169,5 +171,8 @@ export function metrics(model,weights,rf=0,capital=1000000) {
   });
   const openRecovery=underwater?(new Date(model.dates.at(-1))-new Date(model.dates[peakIndex]))/day:0;
   const expectedReturn=dot(weights,model.mu),risk=Math.sqrt(Math.max(0,variance(weights,model.cov)));
-  return {expectedReturn,risk,sharpe:risk<1e-10?null:(expectedReturn-rf)/risk,cagr:Math.pow(wealth.at(-1),model.frequency/r.length)-1,totalReturn:wealth.at(-1)-1,maxDrawdown,longestRecovery,openRecovery,wealth,drawdown,expectedIncome:capital*expectedReturn,finalCapital:capital*wealth.at(-1)};
+  const maxRecovery=Math.max(longestRecovery,openRecovery),recoveryIncomplete=underwater&&openRecovery>=longestRecovery;
+  const cagr=Math.pow(wealth.at(-1),model.frequency/r.length)-1,expectedIncome=capital*expectedReturn;
+  if(![expectedReturn,risk,cagr,expectedIncome].every(Number.isFinite))throw Error('Показатели выходят за допустимый числовой диапазон. Проверьте исходные уровни и периодичность.');
+  return {expectedReturn,risk,sharpe:risk<1e-10?null:(expectedReturn-rf)/risk,cagr,totalReturn:wealth.at(-1)-1,maxDrawdown,longestRecovery,openRecovery,maxRecovery,recoveryIncomplete,wealth,drawdown,expectedIncome,finalCapital:capital*wealth.at(-1)};
 }
