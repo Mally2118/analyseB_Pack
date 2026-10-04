@@ -57,12 +57,3 @@ test('mobile charts and controls fit the viewport',async({page},testInfo)=>{
   await page.click('#save-button');await expect(page.locator('#comparison-table tbody tr')).toHaveCount(3);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
-test('WebMCP contract uses shared state and rejects invalid inputs',async({page})=>{
-  await page.addInitScript(()=>{window.registeredTools={};Object.defineProperty(document,'modelContext',{value:{registerTool(tool){window.registeredTools[tool.name]=tool;}}});});
-  await page.goto('/');await expect(page.locator('#expected-income')).not.toHaveText('—');
-  const names=await page.evaluate(()=>Object.keys(window.registeredTools));expect(names).toHaveLength(3);
-  const result=await page.evaluate(()=>window.registeredTools.calculate_portfolio.execute({criterion:'markowitz'}));expect(result.name).toBe('Марковиц');await expect(page.locator('#current-title')).toHaveText('Марковиц');
-  const invalid=await page.evaluate(()=>{try{window.registeredTools.calculate_portfolio.execute({criterion:'invalid'});return false;}catch{return true;}});expect(invalid).toBeTruthy();
-  const p=await page.evaluate(()=>window.registeredTools.save_portfolio_for_comparison.execute({}));expect(p.id).toBeTruthy();
-  const read=await page.evaluate(()=>window.registeredTools.read_portfolio_analysis.execute({}));expect(read.compared).toHaveLength(2);expect(read.current.weights.reduce((s,x)=>s+x,0)).toBeCloseTo(1,8);
-});

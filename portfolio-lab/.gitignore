@@ -1,5 +1,5 @@
 node_modules/
-.sites-runtime/
+.*-runtime/
 *.tar.gz
 *.log
 test-results/
