@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT_FINGERPRINT = 'D26D2D0231B7C39F92CC738512BA54103519E4405D68B5BD703E9788CA8ECF31';
-const SOURCES = ['root', 'sub'].map(kind => `https://gu-st.ru/content/lending/russian_trusted_${kind}_ca_pem.crt`);
+const SOURCES = ['russian_trusted_root_ca_pem.crt', 'russian_trusted_sub_ca_2024_pem.crt'].map(name => `https://gu-st.ru/content/lending/${name}`);
 const BUNDLED = fileURLToPath(new URL('./certs/rosstat-ca.pem', import.meta.url));
 const DEFAULT_OUTPUT = fileURLToPath(new URL('./artifacts/rosstat-ca.pem', import.meta.url));
 

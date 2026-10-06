@@ -5,13 +5,13 @@
 Публичные сертификаты в `rosstat-ca.pem` получены 6 октября 2026 года с официальных адресов, опубликованных для [сертификатов Госуслуг](https://www.gosuslugi.ru/crt):
 
 - [Russian Trusted Root CA](https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt)
-- [Russian Trusted Sub CA](https://gu-st.ru/content/lending/russian_trusted_sub_ca_pem.crt)
+- [Russian Trusted Sub CA, выпуск 2024 года](https://gu-st.ru/content/lending/russian_trusted_sub_ca_2024_pem.crt), действует с 15 июля 2024 по 19 июля 2029 года
 
 SHA-256 отпечатки DER-сертификатов:
 
 ```text
 Root: D26D2D0231B7C39F92CC738512BA54103519E4405D68B5BD703E9788CA8ECF31
-Sub:  BBBDE2103E790B999EC62BD03CF625A5A2E7C316E10AFE6A490EEDEAD8B3FD9B
+Sub:  2155785036C900DBB5F1BB2A1569C80C55595BD6BF94867A29BBDDBC7D88A3F2
 ```
 
 `node portfolio-lab/configure-rosstat-trust.mjs` получает текущую официальную пару по HTTPS и создаёт `portfolio-lab/artifacts/rosstat-ca.pem`. Проверяются закреплённый отпечаток корня, подписи, сроки действия и признак CA обоих сертификатов. Замена промежуточного сертификата допускается, если он подписан тем же корнем. При недоступности официальных файлов используется вложенная копия после тех же проверок.

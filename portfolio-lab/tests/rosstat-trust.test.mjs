@@ -36,7 +36,7 @@ function officialFetch() {
 test('bundled Rosstat chain has the pinned self-signed root and currently valid signed intermediate', () => {
   const { root, sub } = validateOfficialChain(bundle, now);
   assert.equal(root.fingerprint256.replace(/:/g, ''), ROOT_FINGERPRINT);
-  assert.equal(sub.fingerprint256.replace(/:/g, ''), 'BBBDE2103E790B999EC62BD03CF625A5A2E7C316E10AFE6A490EEDEAD8B3FD9B');
+  assert.equal(sub.fingerprint256.replace(/:/g, ''), '2155785036C900DBB5F1BB2A1569C80C55595BD6BF94867A29BBDDBC7D88A3F2');
   assert.equal(root.ca, true);
   assert.equal(sub.ca, true);
   assert.equal(root.verify(root.publicKey), true);
@@ -50,6 +50,7 @@ test('trust validation rejects wrong roots, duplicated roots, incomplete bundles
   }
   assert.throws(() => validateOfficialChain(bundle, new Date('2001-01-01')), /not currently valid/);
   assert.throws(() => validateOfficialChain(bundle, new Date('2040-01-01')), /not currently valid/);
+  assert.throws(() => validateOfficialChain(bundle, new Date('2029-07-20')), /not currently valid/);
 });
 
 test('a certificate with a modified intermediate signature cannot be trusted', () => {

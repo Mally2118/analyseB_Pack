@@ -59,7 +59,9 @@ jobs:
       - name: Inspect public Rosstat certificate
         if: github.event.inputs.diagnostics == 'true'
         run: |
-          timeout 20 openssl s_client -connect www.rosstat.gov.ru:443 -servername www.rosstat.gov.ru -showcerts </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -dates -fingerprint -sha256
+          timeout 20 openssl s_client -connect www.rosstat.gov.ru:443 -servername www.rosstat.gov.ru -showcerts </dev/null 2>/dev/null | openssl x509 -out portfolio-lab/artifacts/rosstat-leaf.pem
+          openssl x509 -in portfolio-lab/artifacts/rosstat-leaf.pem -noout -issuer -subject -dates -fingerprint -sha256
+          openssl verify -CAfile portfolio-lab/artifacts/rosstat-ca.pem portfolio-lab/artifacts/rosstat-leaf.pem
 
       - name: Prepare successful statistics for cache
         if: steps.refresh.outputs.updated == 'true'
