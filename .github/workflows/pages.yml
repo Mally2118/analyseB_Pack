@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '23 5 * * *'
 
 permissions:
   contents: read
@@ -23,6 +25,36 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Restore last successful statistics
+        uses: actions/cache/restore@v6
+        with:
+          path: portfolio-lab/artifacts/market-data-cache.json
+          key: market-data-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: market-data-v1-
+
+      - name: Refresh official statistics
+        id: refresh
+        run: node portfolio-lab/update-market-data.mjs --fallback portfolio-lab/artifacts/market-data-cache.json
+
+      - name: Prepare successful statistics for cache
+        if: steps.refresh.outputs.updated == 'true'
+        run: |
+          mkdir -p portfolio-lab/artifacts
+          cp portfolio-lab/dist/data/market-data.json portfolio-lab/artifacts/market-data-cache.json
+
+      - name: Save official statistics
+        if: steps.refresh.outputs.updated == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: portfolio-lab/artifacts/market-data-cache.json
+          key: market-data-v1-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

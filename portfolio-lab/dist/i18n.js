@@ -72,7 +72,10 @@ const english = {
   'Загрузка из ЦБ, Росстата и Мосбиржи…': 'Loading from CBR, Rosstat and MOEX…',
   'Загружено {count} наблюдений. Откройте «Портфель», «Сравнение» или «Проверка».': 'Loaded {count} observations. Open Portfolio, Comparison or Validation.',
   'Скачано: {date}. Наблюдений: {count}.': 'Downloaded: {date}. Observations: {count}.',
-  'Для автозагрузки запустите сайт через «Запустить.bat» или npm start. Статический хостинг не предоставляет API статистики.': 'For automatic loading, start the site using Запустить.bat or npm start. Static hosting does not provide the statistics API.',
+  'Доступны месяцы: {from} — {to}. Обновлено: {date}. Новые публикации проверяются ежедневно.': 'Available months: {from} — {to}. Updated: {date}. New publications are checked daily.',
+  'Подготовленная официальная статистика. Данные доступны после публикации всеми источниками.': 'Prepared official statistics. Data becomes available after publication by all sources.',
+  'Подготовленная статистика повреждена. Повторите загрузку позже.': 'The prepared statistics file is invalid. Try loading again later.',
+  'Не удалось загрузить подготовленную статистику. Повторите загрузку или используйте Excel.': 'Could not load the prepared statistics. Try again or use Excel.',
   'Не удалось получить официальные данные. Попробуйте другой период.': 'Could not load official data. Try another period.',
   'Источник вернул некорректные данные. Предыдущая выборка сохранена.': 'The source returned invalid data. The previous sample is preserved.',
   'Источники отвечают слишком долго. Повторите загрузку.': 'Sources are taking too long to respond. Try loading again.',
@@ -258,7 +261,7 @@ const english = {
   'Учебные данные': 'Demo data',
   'Ваш Excel': 'Your Excel',
   'Вернуть учебный пример': 'Restore demo data',
-  'Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите Excel. Цены валют и активов должны быть выражены в рублях.': 'Synthetic series illustrate the calculations. Upload Excel to work with historical data. Currency and asset prices must be expressed in rubles.',
+  'Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите официальную статистику выше или свой Excel. Цены валют и активов должны быть выражены в рублях.': 'Synthetic series illustrate the calculations. Load the official statistics above or your own Excel to work with historical data. Currency and asset prices must be expressed in rubles.',
   'Настройки портфеля': 'Portfolio settings',
   'Критерий оптимизации': 'Optimization criterion',
   'Критерий Марковица': 'Markowitz criterion',
@@ -555,6 +558,7 @@ export function translateError(source) {
   if (language === 'ru') return source;
   if (english[source]) return english[source];
   return source
+    .replace(/^В подготовленной статистике доступен период с (\d{4}-\d{2}) по (\d{4}-\d{2})\. Выберите даты внутри этого периода\.$/, 'The prepared statistics covers $1 to $2. Choose dates within this period.')
     .replace(/^(.+): данные за (\d{4}-\d{2}) отсутствуют(?:; последний доступный месяц — (\d{4}-\d{2}))?\. Выберите другой период\.$/, (_match,label,month,last) => t(label)+': data for '+month+' is missing'+(last?'; last available month: '+last:'')+'. Choose another period.')
     .replace(/^(.+) недоступен \((.+)\)\. Попробуйте позже или загрузите Excel\.$/, (_match,label,reason) => t(label)+' is unavailable ('+t(reason)+'). Try again later or upload Excel.')
     .replace(/^(.+): источник вернул некорректное значение\.$/, (_match,label) => t(label)+': the source returned an invalid value.')

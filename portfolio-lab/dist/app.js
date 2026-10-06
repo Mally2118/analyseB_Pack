@@ -62,7 +62,7 @@ function render() {
   $('data-status').textContent=$('data-badge').textContent;
   $('upload-status').textContent=data.demo?t('Перетащите Excel сюда'):data.official?t(data.source):data.source;
   $('data-info').textContent=`${data.rows[0].date} — ${data.rows.at(-1).date} · ${data.rows.length} ${t('наблюдений')} · ${t('инфляция')} ${percent(model.inflation)} ${t('/ год')}`;
-  $('demo-note').textContent=data.demo?t('Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите Excel. Цены валют и активов должны быть выражены в рублях.'):data.official?t('Официальные месячные ряды ЦБ, Росстата и Мосбиржи. Доходности скорректированы на накопленный ИПЦ; подробности источников указаны выше.'):t('Источник: ')+data.source+t('. Все ряды скорректированы на ИПЦ из файла; экономическое содержание и рублёвые единицы проверьте по своим источникам.');
+  $('demo-note').textContent=data.demo?t('Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите официальную статистику выше или свой Excel. Цены валют и активов должны быть выражены в рублях.'):data.official?t('Официальные месячные ряды ЦБ, Росстата и Мосбиржи. Доходности скорректированы на накопленный ИПЦ; подробности источников указаны выше.'):t('Источник: ')+data.source+t('. Все ряды скорректированы на ИПЦ из файла; экономическое содержание и рублёвые единицы проверьте по своим источникам.');
   $('current-title').textContent=portfolioName(current);
   $('expected-income').textContent=money(s.expectedIncome);
   $('expected-rate').textContent=percent(s.expectedReturn)+t(' реальной доходности / год');

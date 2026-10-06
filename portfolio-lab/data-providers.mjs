@@ -11,11 +11,12 @@ const sourceCache = new Map();
 const periodCache = new Map();
 
 export class ProviderError extends Error {
-  constructor(message, { status = 502, code = 'SOURCE_UNAVAILABLE', latestAvailable } = {}) {
+  constructor(message, { status = 502, code = 'SOURCE_UNAVAILABLE', latestAvailable, missingMonth } = {}) {
     super(message);
     this.status = status;
     this.code = code;
     this.latestAvailable = latestAvailable;
+    this.missingMonth = missingMonth;
   }
 }
 
@@ -200,7 +201,7 @@ async function download(url, label, fetchImpl = fetch) {
 
 function missing(label, month, map) {
   const latestAvailable = [...map.keys()].sort().at(-1);
-  throw new ProviderError(`${label}: данные за ${month} отсутствуют${latestAvailable ? `; последний доступный месяц — ${latestAvailable}` : ''}. Выберите другой период.`, { status: 422, code: 'MISSING_DATA', latestAvailable });
+  throw new ProviderError(`${label}: данные за ${month} отсутствуют${latestAvailable ? `; последний доступный месяц — ${latestAvailable}` : ''}. Выберите другой период.`, { status: 422, code: 'MISSING_DATA', latestAvailable, missingMonth: month });
 }
 
 export function assembleMarketData(months, money, cpiRates, series, cpiURL, downloadedAt = new Date().toISOString()) {
