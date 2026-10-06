@@ -309,3 +309,7 @@ dialog::backdrop { background: #16151380; backdrop-filter: blur(3px); }
   .workspace { display: block; }
   .panel, .metric-card { break-inside: avoid; }
 }
+
+.comparison-panel { margin-bottom: 20px; }
+.comparison-source { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
+.example-comparison-actions { margin-bottom: 18px; }

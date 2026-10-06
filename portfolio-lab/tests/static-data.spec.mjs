@@ -70,7 +70,7 @@ test('a static host loads official statistics without a backend and supports Exc
   await openTab(page, 'comparison');
   await page.locator('#compare-target-return').fill('8');
   await page.locator('#compare-all-button').click();
-  await expect(page.locator('#comparison-cards .portfolio-chip')).toHaveCount(4);
+  await expect(page.locator('#comparison-cards .portfolio-chip:not(.current-portfolio-chip)')).toHaveCount(4);
   await openTab(page, 'backtest');
   await page.locator('#backtest-target-return').fill('8');
   await page.locator('#backtest-run-button').click();

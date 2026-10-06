@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const modes=['markowitz','sharpe','risk','return'];
 const reportCharts=['report-frontier-chart','report-return-chart','report-weights-chart','report-capital-chart','report-drawdown-chart','report-recovery-chart'];
-const cards=page=>page.locator('#comparison-cards .portfolio-chip');
+const cards=page=>page.locator('#comparison-cards .portfolio-chip:not(.current-portfolio-chip)');
 
 async function openTab(page,name) {
   await page.locator('#tab-'+name).click();
@@ -81,16 +81,16 @@ test('downloadable Excel example imports, compares all four criteria and keeps r
 
 test('criterion cards add directly, distinguish risk settings and translate without replacing the current portfolio',async({page})=>{
   await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();const current=await dashboard(page);
-  await openTab(page,'comparison');await expect(cards(page)).toHaveCount(1);
-  await addCriterion(page,'risk');await expect(cards(page)).toHaveCount(2);
-  await addCriterion(page,'risk');await expect(cards(page)).toHaveCount(2);
-  await page.locator('#compare-lambda').fill('4');await addCriterion(page,'markowitz');await expect(cards(page)).toHaveCount(3);
-  await page.locator('#compare-lambda').fill('7');await addCriterion(page,'markowitz');await expect(cards(page)).toHaveCount(4);
+  await openTab(page,'comparison');await expect(cards(page)).toHaveCount(2);
+  await addCriterion(page,'risk');await expect(cards(page)).toHaveCount(3);
+  await addCriterion(page,'risk');await expect(cards(page)).toHaveCount(3);
+  await page.locator('#compare-lambda').fill('4');await addCriterion(page,'markowitz');await expect(cards(page)).toHaveCount(4);
+  await page.locator('#compare-lambda').fill('7');await addCriterion(page,'markowitz');await expect(cards(page)).toHaveCount(5);
   await expect(cards(page).filter({hasText:'λ = 4'})).toHaveCount(1);await expect(cards(page).filter({hasText:'λ = 7'})).toHaveCount(1);
   expect(await dashboard(page)).toEqual(current);
   const rows=await page.locator('#comparison-table tbody tr').allTextContents();
   await page.locator('#language-button').click();await expect(page.locator('html')).toHaveAttribute('lang','en');
-  await expect(page.locator('#panel-comparison')).toBeVisible();await expect(cards(page)).toHaveCount(4);
+  await expect(page.locator('#panel-comparison')).toBeVisible();await expect(cards(page)).toHaveCount(5);
   await expect(page.locator('#compare-lambda')).toHaveValue('7');
   expect(await page.locator('#panel-comparison').innerText()).not.toMatch(/[А-Яа-яЁё]/);
   await expect(page.locator('#message')).not.toHaveClass(/error/);
@@ -127,7 +127,7 @@ test('invalid and infeasible comparison batches preserve saved results, and unre
   await expect(page.locator('#message')).toHaveClass(/error/);await expect(page.locator('#message')).toContainText(/минимально достижим/i);
   await expectMessageInViewport(page);
   expect(await savedState(page)).toEqual(before);
-  await addCriterion(page,'markowitz');await expect(cards(page)).toHaveCount(3);
+  await addCriterion(page,'markowitz');await expect(cards(page)).toHaveCount(4);
   expect(await dashboard(page)).toEqual(before.dashboard);
 });
 
@@ -135,7 +135,7 @@ test('comparison capacity errors leave the complete previous comparison intact a
   test.setTimeout(45000);
   await page.setViewportSize({width:390,height:844});await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();
   await openTab(page,'comparison');
-  for(let lambda=4;lambda<=10;lambda++) {await page.locator('#compare-lambda').fill(String(lambda));await addCriterion(page,'markowitz');}
+  for(let lambda=4;lambda<=9;lambda++) {await page.locator('#compare-lambda').fill(String(lambda));await addCriterion(page,'markowitz');}
   await expect(cards(page)).toHaveCount(8);await expect(page.locator('#comparison-table tbody tr')).toHaveCount(9);
   const before=await savedState(page);
   await page.locator('#compare-all-button').click();
@@ -149,14 +149,14 @@ test('comparison capacity errors leave the complete previous comparison intact a
 test('comparison uses the last applied common settings and preserves all results when Sharpe becomes infeasible',async({page})=>{
   await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();const current=await dashboard(page);
   await page.locator('#capital').fill('2000000');await openTab(page,'comparison');await addCriterion(page,'risk');
-  await expect(cards(page)).toHaveCount(2);expect(await dashboard(page)).toEqual(current);
+  await expect(cards(page)).toHaveCount(3);expect(await dashboard(page)).toEqual(current);
   await expect(page.locator('#comparison-context')).toBeVisible();
   await openTab(page,'portfolio');await page.locator('#calculate-button').click();
   await expect(page.locator('#message')).not.toHaveClass(/error/);
   await expect(page.locator('#expected-income')).not.toHaveText(current.metrics[0]);
-  await openTab(page,'comparison');await expect(cards(page)).toHaveCount(2);
+  await openTab(page,'comparison');await expect(cards(page)).toHaveCount(3);
   await expect(page.locator('#comparison-context')).toContainText(/2[ \u00a0\u202f]000[ \u00a0\u202f]000/);
-  await page.locator('#compare-all-button').click();await expect(cards(page)).toHaveCount(4);
+  await page.locator('#compare-all-button').click();await expect(cards(page)).toHaveCount(6);
   await openTab(page,'portfolio');await page.locator('#mode').selectOption('markowitz');
   await page.locator('#rf').evaluate(element=>{const details=element.closest('details');if(details)details.open=true;});
   await page.locator('#rf').fill('200');await page.locator('#calculate-button').click();

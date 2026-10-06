@@ -1,5 +1,17 @@
 // Russian source strings are stable translation keys; user-provided names stay unchanged.
 const english = {
+  'Пример': 'Example',
+  'Доходности': 'Returns',
+  'Граница': 'Frontier',
+  'Учебный пример': 'Learning example',
+  'Сравнить 2 примера': 'Compare 2 examples',
+  'Убрать из сравнения': 'Remove from comparison',
+  'Портфель убран из сравнения.': 'Portfolio removed from comparison.',
+  'Сравнение пусто. Добавьте учебные примеры или рассчитайте и добавьте свой портфель.': 'Comparison is empty. Add the learning examples or calculate and add your own portfolio.',
+  'Два учебных портфеля уже готовы к сравнению. Добавляйте свои варианты; × убирает портфель, флажок скрывает его на общем графике.': 'Two learning portfolios are ready to compare. Add your own variants; × removes a portfolio and the checkbox hides it on the combined chart.',
+  'Учебные примеры М2 рассчитаны каждый по своему файлу: максимум Шарпа, ставка 8%, месячные данные. Капитал общий; остальные варианты используют текущую выборку.': 'Each M2 example uses its own workbook: maximum Sharpe, 8% rate, monthly data. Capital is shared; other variants use the current dataset.',
+  'Два учебных портфеля готовы к сравнению. Каждый использует свои синтетические данные и ставку 8%.': 'Both learning portfolios are ready to compare. Each uses its own synthetic dataset and an 8% rate.',
+
   'Проверка': 'Validation',
   'Проверка на новом периоде': 'Validate on a later period',
   'Рассчитайте веса на первой части данных и проверьте их на следующей. Сравните результат с портфелем равных долей.': 'Fit weights on the first part of the data and test them on the next. Compare with an equal-weight portfolio.',
