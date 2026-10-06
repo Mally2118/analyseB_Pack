@@ -45,8 +45,15 @@ jobs:
           key: market-data-v1-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: market-data-v1-
 
+      - name: Prepare official Rosstat certificate chain
+        env:
+          NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/portfolio-lab/certs/rosstat-ca.pem
+        run: node portfolio-lab/configure-rosstat-trust.mjs
+
       - name: Refresh official statistics
         id: refresh
+        env:
+          NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/portfolio-lab/artifacts/rosstat-ca.pem
         run: node portfolio-lab/update-market-data.mjs --fallback portfolio-lab/artifacts/market-data-cache.json ${{ github.event.inputs.diagnostics == 'true' && '--diagnose-runner' || '' }}
 
       - name: Inspect public Rosstat certificate
