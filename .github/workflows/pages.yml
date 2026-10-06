@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      diagnostics:
+        description: 'Log connection diagnostics for the official sources'
+        type: boolean
+        default: false
   schedule:
     - cron: '23 5 * * *'
 
@@ -19,6 +24,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -41,7 +47,7 @@ jobs:
 
       - name: Refresh official statistics
         id: refresh
-        run: node portfolio-lab/update-market-data.mjs --fallback portfolio-lab/artifacts/market-data-cache.json
+        run: node portfolio-lab/update-market-data.mjs --fallback portfolio-lab/artifacts/market-data-cache.json ${{ github.event.inputs.diagnostics == 'true' && '--diagnose-runner' || '' }}
 
       - name: Prepare successful statistics for cache
         if: steps.refresh.outputs.updated == 'true'

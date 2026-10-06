@@ -142,7 +142,12 @@ test('provider orchestrates only official sources and returns a complete engine-
 
 test('upstream failure is explicit, and invalid periods make no network requests', async () => {
   const {fake,requested} = fixtureFetch({status:503});
-  await assert.rejects(loadMarketData('2024-01','2025-01',{fetchImpl:fake,now,useCache:false}), error => error.status === 502 && error.code === 'SOURCE_UNAVAILABLE' && error.message.includes('HTTP 503'));
+  await assert.rejects(loadMarketData('2024-01','2025-01',{fetchImpl:fake,now,useCache:false}), error => {
+    assert.equal(error.cause.message, 'HTTP 503');
+    assert.equal(Object.keys(error).includes('cause'), false);
+    assert.equal(JSON.stringify(error).includes('stack'), false);
+    return error.status === 502 && error.code === 'SOURCE_UNAVAILABLE' && error.message.includes('HTTP 503');
+  });
   const clean = fixtureFetch();
   await assert.rejects(loadMarketData('2024-12','2025-01',{fetchImpl:clean.fake,now,useCache:false}), error => error.status === 400);
   assert.equal(clean.requested.length, 0);

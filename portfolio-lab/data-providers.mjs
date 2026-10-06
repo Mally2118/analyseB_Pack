@@ -11,8 +11,8 @@ const sourceCache = new Map();
 const periodCache = new Map();
 
 export class ProviderError extends Error {
-  constructor(message, { status = 502, code = 'SOURCE_UNAVAILABLE', latestAvailable, missingMonth } = {}) {
-    super(message);
+  constructor(message, { status = 502, code = 'SOURCE_UNAVAILABLE', latestAvailable, missingMonth, cause } = {}) {
+    super(message, cause ? { cause } : undefined);
     this.status = status;
     this.code = code;
     this.latestAvailable = latestAvailable;
@@ -195,7 +195,7 @@ async function download(url, label, fetchImpl = fetch) {
     }
     return Buffer.concat(chunks);
   } catch (error) {
-    throw new ProviderError(`${label} недоступен (${error.name === 'TimeoutError' ? 'истекло время ожидания' : error.message}). Попробуйте позже или загрузите Excel.`, { code: 'SOURCE_UNAVAILABLE' });
+    throw new ProviderError(`${label} недоступен (${error.name === 'TimeoutError' ? 'истекло время ожидания' : error.message}). Попробуйте позже или загрузите Excel.`, { code: 'SOURCE_UNAVAILABLE', cause: error });
   }
 }
 

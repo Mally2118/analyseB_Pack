@@ -134,7 +134,7 @@ export async function refreshSnapshot({ output, fallback, build = buildMarketSna
   } catch (error) {
     if (strict || !previous) throw error;
     if (previous.path !== target) await atomicWrite(target, previous.snapshot);
-    warn(`Обновление официальной статистики не выполнено: ${error.message} Сохранён снимок от ${previous.snapshot.downloadedAt} с данными по ${previous.snapshot.period.to}.`);
+    warn(`Обновление официальной статистики не выполнено: ${error.message} Сохранён снимок от ${previous.snapshot.downloadedAt} с данными по ${previous.snapshot.period.to}.`, error);
     return { snapshot: previous.snapshot, refreshed: false };
   }
 }
