@@ -332,3 +332,28 @@ dialog::backdrop { background: #16151380; backdrop-filter: blur(3px); }
 :root[data-theme='dark'] .metric-difference.improvement { color: #80cba5; }
 @media (max-width: 600px) { .comparison-tools .heading-actions, .comparison-library-row .heading-actions { width: 100%; } .comparison-check { margin-top: 4px; } }
 .comparison-panel .table-scroll { position: relative; }
+
+.guide-start { margin-bottom: 20px; }
+.guide-start h3 { margin: 0 0 20px; }
+.guide-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 0; padding: 0; list-style: none; counter-reset: guide-step; }
+.guide-steps li { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; counter-increment: guide-step; }
+.guide-steps li::before { content: '0' counter(guide-step); color: var(--accent); font: 500 13px var(--sans); margin-bottom: 10px; }
+.guide-steps h4 { margin: 0; font-size: 16px; }
+.guide-steps p, .guide-section p, .guide-section dd { color: var(--ink-2); font-size: 13px; line-height: 1.65; }
+.guide-steps p { margin: 8px 0 16px; }
+.guide-steps .button { margin-top: auto; }
+.guide-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.guide-section summary { cursor: pointer; color: var(--ink); font-size: 15px; font-weight: 500; }
+.guide-section[open] summary { margin-bottom: 18px; }
+.guide-section summary::marker { color: var(--accent); }
+.guide-section dl { margin: 0; }
+.guide-section dt { margin-top: 14px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.guide-section dt:first-child { margin-top: 0; }
+.guide-section dd { margin: 4px 0 0; }
+.guide-section p { margin: 14px 0 0; }
+.guide-section .button { margin-top: 16px; }
+@media (max-width: 700px) {
+  .guide-steps, .guide-sections { grid-template-columns: minmax(0, 1fr); }
+  .guide-steps { gap: 20px; }
+  .guide-steps li + li { padding-top: 20px; border-top: 1px solid var(--rule); }
+}

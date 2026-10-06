@@ -319,7 +319,7 @@ function resizeVisibleCharts() {
   if(activeTab==='backtest')backtestView?.resize();
 }
 function activateTab(name,{focus=false,updateHash=true}={}) {
-  if(!['portfolio','graphs','comparison','backtest','data'].includes(name))return;
+  if(!['portfolio','graphs','comparison','backtest','data','help'].includes(name))return;
   activeTab=name;
   $(name==='comparison'?'comparison-feedback-slot':'global-message-slot').append($('message'));
   for(const button of document.querySelectorAll('[data-tab]')) {

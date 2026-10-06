@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import XLSX from 'xlsx';
 import {readFile} from 'node:fs/promises';
 
-const tabs=['portfolio','graphs','comparison','backtest','data'];
+const tabs=['portfolio','graphs','comparison','backtest','data','help'];
 const primaryCharts=['frontier-chart','equity-chart','weights-chart'];
 const individualCharts=['report-frontier-chart','report-return-chart','report-weights-chart','report-capital-chart','report-drawdown-chart','report-recovery-chart'];
 const reportCharts=[...individualCharts,'report-comparison-chart'];
@@ -96,7 +96,7 @@ test('mobile tabs, individual report drawings and controls fit the viewport',asy
   await page.screenshot({path:testInfo.outputPath('mobile.png'),fullPage:true});
   await expectNoOverflow(page);
   await page.click('#save-button');await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);
-  for(const tab of ['graphs','data','comparison','backtest','portfolio']) {
+  for(const tab of ['graphs','data','comparison','backtest','help','portfolio']) {
     await activateTab(page,tab);
     await expectNoOverflow(page);
     if(tab==='graphs') {
@@ -366,7 +366,7 @@ test('Excel upload supports keyboard and file drop while preserving data on inva
 
 test('tabs support arrow keys, Home and End with one active accessible panel',async({page})=>{
   await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveCount(5);
+  await expect(page.getByRole('tab')).toHaveCount(6);
   for(const name of tabs) {
     await expect(page.locator('#tab-'+name)).toHaveAttribute('role','tab');
     await expect(page.locator('#tab-'+name)).toHaveAttribute('aria-controls','panel-'+name);
@@ -374,7 +374,7 @@ test('tabs support arrow keys, Home and End with one active accessible panel',as
     await expect(page.locator('#panel-'+name)).toHaveAttribute('aria-labelledby','tab-'+name);
   }
   await page.locator('#tab-portfolio').focus();
-  const steps=[['ArrowRight','graphs'],['ArrowRight','comparison'],['ArrowRight','backtest'],['ArrowRight','data'],['ArrowRight','portfolio'],['ArrowLeft','data'],['Home','portfolio'],['End','data']];
+  const steps=[['ArrowRight','graphs'],['ArrowRight','comparison'],['ArrowRight','backtest'],['ArrowRight','data'],['ArrowRight','help'],['ArrowRight','portfolio'],['ArrowLeft','help'],['Home','portfolio'],['End','help']];
   for(const [key,active] of steps) {
     await page.keyboard.press(key);
     await expect(page.locator('#tab-'+active)).toBeFocused();
@@ -385,4 +385,49 @@ test('tabs support arrow keys, Home and End with one active accessible panel',as
       else await expect(page.locator('#panel-'+name)).toBeHidden();
     }
   }
+});
+
+test('guide supports direct links, shortcuts, keyboard, translation and mobile without changing results',async({page},testInfo)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('/#help');
+  const guide=page.locator('#panel-help');
+  await expect(guide).toBeVisible();
+  await expect(page.locator('#tab-help')).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('#expected-income')).not.toHaveText('—');
+  const result=()=>page.evaluate(()=>({
+    income:document.getElementById('expected-income').textContent,
+    indicators:document.querySelector('#indicators-table tbody').textContent,
+    comparison:document.querySelector('#comparison-table tbody').textContent
+  }));
+  const before=await result();
+  for(const target of ['data','portfolio','comparison','backtest']) {
+    if(target==='backtest')await guide.locator('details').filter({has:page.getByText('Зачем нужна «Проверка»',{exact:true})}).locator('summary').click();
+    await guide.locator('[data-open-tab="'+target+'"]').click();
+    await expect(page.locator('#panel-'+target)).toBeVisible();
+    await expect(page).toHaveURL(new RegExp('#'+target+'$'));
+    await activateTab(page,'help');
+  }
+  const topics=guide.locator('details');
+  const metrics=topics.nth(2);
+  await metrics.locator('summary').focus();await page.keyboard.press('Enter');
+  await expect(metrics).toHaveAttribute('open','');
+  await expect(metrics.getByText('Коэффициент Шарпа',{exact:true})).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath('guide-desktop.png'),fullPage:true});
+  for(let i=0;i<await topics.count();i++) {
+    const topic=topics.nth(i);
+    if(!await topic.evaluate(element=>element.open))await topic.locator('summary').click();
+  }
+  await page.click('#language-button');await page.click('#theme-button');
+  await expect(page.locator('#tab-help')).toHaveText('Instructions');
+  expect(await guide.textContent()).not.toMatch(/[А-Яа-яЁё]/);
+  await expect(metrics.getByText('Sharpe ratio',{exact:true})).toBeVisible();
+  for(const width of [390,320]) {
+    await page.setViewportSize({width,height:844});
+    await expectNoOverflow(page);
+  }
+  for(let i=0;i<await topics.count();i++)if(i!==2)await topics.nth(i).locator('summary').click();
+  await page.screenshot({path:testInfo.outputPath('guide-mobile-dark.png'),fullPage:true});
+  await page.click('#language-button');
+  expect(await result()).toEqual(before);
+  expect(errors).toEqual([]);
 });
