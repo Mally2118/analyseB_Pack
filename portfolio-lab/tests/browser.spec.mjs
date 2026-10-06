@@ -28,9 +28,11 @@ test('four criteria, chart comparison, errors and Excel roundtrip',async({page},
   await expect(page.locator('#message')).toHaveClass(/error/);
   await expect(page.locator('#risk-value')).toHaveText(previous);
   await page.selectOption('#mode','markowitz');
-  await page.selectOption('#first-indicator','cash');await page.click('#calculate-button');
-  await expect(page.locator('#comparison-cards .portfolio-chip')).toHaveCount(0);
-  await expect(page.locator('#indicators-table')).toContainText('Рублёвый остаток');
+  await expect(page.locator('#first-indicator')).toBeDisabled();
+  await expect(page.locator('#first-indicator')).toHaveValue('m2');
+  await expect(page.locator('#first-indicator option')).toHaveCount(1);
+  await expect(page.locator('#indicators-table tbody tr').first()).toContainText('Рублёвая масса М2');
+  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(6);
   await page.click('#demo-button');
   const downloadPromise=page.waitForEvent('download');await page.click('#template-button');const download=await downloadPromise;
   const file=testInfo.outputPath('template.xlsx');await download.saveAs(file);
@@ -160,7 +162,7 @@ test('language and theme switching preserve portfolio data and translate charts 
   const dark=await series();expect(dark.slice(0,2)).toEqual(english.slice(0,2));
   expect(dark[2].map(s=>s.map(p=>({name:p.name,value:p.value})))).toEqual(english[2].map(s=>s.map(p=>({name:p.name,value:p.value}))));
   const backgrounds=await page.evaluate(()=>['frontier-chart','equity-chart','weights-chart'].map(id=>echarts.getInstanceByDom(document.getElementById(id)).getOption().backgroundColor));
-  expect(backgrounds).toEqual(['#1b2923','#1b2923','#1b2923']);
+  expect(backgrounds).toEqual(['#161615','#161615','#161615']);
   await page.click('#method-button');await expect(page.locator('#method-dialog')).toBeVisible();
   expect(await page.locator('#method-dialog').innerText()).not.toMatch(/[А-Яа-яЁё]/);
   await page.screenshot({path:testInfo.outputPath('english-dark-method.png'),fullPage:true});
@@ -168,7 +170,7 @@ test('language and theme switching preserve portfolio data and translate charts 
   const waiting=page.waitForEvent('download');await page.locator('[data-download="frontier-chart"]').click();
   const download=await waiting;expect(download.suggestedFilename()).toBe('Efficient_frontier.svg');
   const file=testInfo.outputPath('english-dark.svg');await download.saveAs(file);
-  const svg=await readFile(file,'utf8');expect(svg).toContain('Risk, % / year');expect(svg).toContain('Return, % / year');expect(svg).toContain('#1b2923');
+  const svg=await readFile(file,'utf8');expect(svg).toContain('Risk, % / year');expect(svg).toContain('Return, % / year');expect(svg).toContain('#161615');
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   await page.screenshot({path:testInfo.outputPath('english-dark-mobile.png'),fullPage:true});
@@ -207,4 +209,46 @@ test('English Excel roundtrip, original uploaded names and translated validation
   await page.locator('#file-input').setInputFiles({name:'bad.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(XLSX.write(bad,{type:'buffer',bookType:'xlsx'}))});
   await expect(page.locator('#message')).toHaveClass(/error/);await expect(page.locator('#message')).toContainText('At least 13');
   await page.click('#language-button');await expect(page.locator('#message')).toContainText('Нужно минимум 13');
+});
+
+test('Excel upload supports keyboard and file drop while preserving data on invalid files',async({page})=>{
+  await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();
+  const frame=page.locator('#upload-frame');
+  for(const key of ['Enter','Space']) {
+    await frame.focus();
+    const chooserPromise=page.waitForEvent('filechooser');
+    await frame.press(key);
+    await (await chooserPromise).setFiles([]);
+  }
+  const invalid=await page.evaluateHandle(()=>{const dt=new DataTransfer();dt.items.add(new File(['invalid'],'prices.csv',{type:'text/csv'}));return dt;});
+  await frame.dispatchEvent('dragenter',{dataTransfer:invalid});
+  await expect(frame).toHaveClass(/dragging/);
+  await frame.dispatchEvent('drop',{dataTransfer:invalid});
+  await expect(frame).not.toHaveClass(/dragging/);
+  await expect(page.locator('#message')).toHaveClass(/error/);
+  await expect(page.locator('#message')).toContainText('Выберите файл .xlsx или .xls.');
+  await expect(page.locator('#data-status')).toHaveText('Учебные данные');
+  await expect(page.locator('#indicators-table tbody tr')).toHaveCount(10);
+  await invalid.dispose();
+
+  const book=XLSX.utils.book_new();
+  const names=['Рублёвая масса М2',...Array.from({length:9},(_,i)=>'Индикатор '+(i+2))];
+  const rows=Array.from({length:13},(_,i)=>[new Date(Date.UTC(2020,i+1,0)).toISOString().slice(0,10),100,...Array(10).fill(100+i)]);
+  XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['Дата','ИПЦ',...names],...rows]),'Данные');
+  const bytes=Array.from(XLSX.write(book,{type:'buffer',bookType:'xlsx'}));
+  const transfer=await page.evaluateHandle(data=>{const dt=new DataTransfer();dt.items.add(new File([new Uint8Array(data)],'dropped.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return dt;},bytes);
+  await frame.dispatchEvent('dragenter',{dataTransfer:transfer});
+  await frame.dispatchEvent('dragover',{dataTransfer:transfer});
+  await frame.dispatchEvent('drop',{dataTransfer:transfer});
+  await expect(frame).not.toHaveClass(/dragging/);
+  await expect(page.locator('#data-status')).toHaveText('Ваш Excel');
+  await expect(page.locator('#data-badge')).toHaveText('Ваш Excel');
+  await expect(page.locator('#upload-status')).toHaveText('dropped.xlsx');
+  await expect(page.locator('#current-title')).toHaveText('Марковиц');
+  await expect(page.locator('#message')).not.toHaveClass(/error/);
+  expect(await page.evaluate(()=>echarts.getInstanceByDom(document.getElementById('equity-chart')).getOption().series[0].data)).toHaveLength(13);
+  await transfer.dispose();
+  await page.click('#demo-button');
+  await expect(page.locator('#data-status')).toHaveText('Учебные данные');
+  await expect(page.locator('#upload-status')).toHaveText('Перетащите Excel сюда');
 });

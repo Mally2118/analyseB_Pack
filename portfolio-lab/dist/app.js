@@ -7,8 +7,8 @@ const money=v=>number(v)+' ₽';
 const recoveryText=s=>(s.recoveryIncomplete?'≥ ':'')+number(s.maxRecovery)+' '+t('дн.');
 const axisPercent=v=>new Intl.NumberFormat(locale(),{maximumSignificantDigits:3}).format(v);
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const lightColors=['#204f40','#91ac35','#557bbe','#d5a04e','#7d68a3','#50a6a2','#b87963','#739764','#68768d','#a08b40'];
-const darkColors=['#90d7b4','#c1dc6b','#94b7f3','#edc079','#baa4e1','#85d0ce','#dda38e','#aad19d','#a8b9d2','#d6c479'];
+const lightColors=['#d9481f','#514c43','#55759b','#a68e4b','#8a719a','#5e9791','#a56855','#7f855f','#697887','#b58c6b'];
+const darkColors=['#ff6a3d','#d0c5b4','#92b4df','#d8bd74','#bfa2d0','#8fc8c0','#ddad9a','#b5c18e','#a9bcca','#d7b799'];
 let colors=theme==='dark'?darkColors:lightColors;
 const modes={markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность'};
 const descriptions={markowitz:'Максимум доходности с штрафом за риск. Чем выше λ, тем осторожнее портфель.',sharpe:'Максимум избыточной реальной доходности на единицу риска.',risk:'Минимальный риск при доходности не ниже заданного уровня.',return:'Максимальная доходность при риске не выше заданного лимита.'};
@@ -53,6 +53,8 @@ function stat(p){return metrics(model,p.weights,rf,capital);}
 function render() {
   const s=stat(current);
   $('data-badge').textContent=data.demo?t('Учебные данные'):t('Ваш Excel');
+  $('data-status').textContent=data.demo?t('Учебные данные'):t('Ваш Excel');
+  $('upload-status').textContent=data.demo?t('Перетащите Excel сюда'):data.source;
   $('data-info').textContent=`${data.rows[0].date} — ${data.rows.at(-1).date} · ${data.rows.length} ${t('наблюдений')} · ${t('инфляция')} ${percent(model.inflation)} ${t('/ год')}`;
   $('demo-note').textContent=data.demo?t('Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите Excel. Цены валют и активов должны быть выражены в рублях.'):t('Источник: ')+data.source+t('. Все ряды скорректированы на ИПЦ из файла; экономическое содержание и рублёвые единицы проверьте по своим источникам.');
   $('current-title').textContent=portfolioName(current);
@@ -70,15 +72,16 @@ function renderComparison() {
   $('comparison-table').querySelector('tbody').innerHTML=allPortfolios().map(p=>{const s=stat(p);return `<tr><td><span class="asset-name"><span class="swatch" style="background:${p.color}"></span>${escape(portfolioName(p))}${p.id==='current'?t(' · текущий'):''}</span></td><td>${money(s.expectedIncome)}</td><td>${percent(s.expectedReturn)}</td><td>${percent(s.risk)}</td><td>${s.sharpe===null?t('Не определён'):new Intl.NumberFormat(locale(),{minimumFractionDigits:2,maximumFractionDigits:2}).format(s.sharpe)}</td><td>${percent(s.cagr)}</td><td>${percent(s.totalReturn)}</td><td>${percent(s.maxDrawdown)}</td><td>${recoveryText(s)}</td><td>${number(s.longestRecovery)} ${t('дн.')}</td><td>${s.openRecovery?'≥ '+number(s.openRecovery)+' '+t('дн.'):'—'}</td></tr>`;}).join('');
 }
 const chartLabels={'frontier-chart':'Эффективная граница и сравниваемые портфели','equity-chart':'Сравнение кривых портфелей','weights-chart':'Интерактивные круговые диаграммы весов'};
-function baseChart(id){const css=getComputedStyle(document.documentElement),muted=css.getPropertyValue('--muted').trim(),line=css.getPropertyValue('--chart-line').trim(),surface=css.getPropertyValue('--surface').trim();return {animation:!matchMedia('(prefers-reduced-motion: reduce)').matches,textStyle:{fontFamily:'Segoe UI, Arial, sans-serif',color:muted,fontSize:12},aria:{enabled:true,label:{description:t(chartLabels[id])}},backgroundColor:surface,tooltip:{backgroundColor:surface,borderColor:line,textStyle:{color:css.getPropertyValue('--text').trim()}}};}
+function baseChart(id){const css=getComputedStyle(document.documentElement),muted=css.getPropertyValue('--muted').trim(),line=css.getPropertyValue('--chart-line').trim(),surface=css.getPropertyValue('--surface').trim();return {animation:!matchMedia('(prefers-reduced-motion: reduce)').matches,textStyle:{fontFamily:'IBM Plex Sans, Arial, sans-serif',color:muted,fontSize:12},aria:{enabled:true,label:{description:t(chartLabels[id])}},backgroundColor:surface,tooltip:{backgroundColor:surface,borderColor:line,textStyle:{color:css.getPropertyValue('--text').trim()}}};}
 function chart(id){return charts[id]??(charts[id]=echarts.init($(id),null,{renderer:'svg'}));}
 function tooltipRows(items,value){return items.map(p=>`<div style="margin:5px 0"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${p.color};margin-right:7px"></span>${escape(p.seriesName)} <b>${escape(value(p))}</b></div>`).join('');}
 function renderCharts() {
   const portfolios=visiblePortfolios(),frontier=optimizer.frontier;
+  const css=getComputedStyle(document.documentElement),chartLine=css.getPropertyValue('--chart-line').trim(),accent=css.getPropertyValue('--accent').trim(),accentSoft=css.getPropertyValue('--accent-soft').trim();
   chart('frontier-chart').setOption({...baseChart('frontier-chart'),grid:{left:58,right:18,top:30,bottom:56},tooltip:{...baseChart().tooltip,trigger:'item',formatter:p=>`${escape(p.seriesName)}<br>${t('Риск:')} <b>${percent(p.value[0]/100)}</b><br>${t('Доходность:')} <b>${percent(p.value[1]/100)}</b>`},xAxis:{type:'value',name:t('Риск, % / год'),nameLocation:'middle',nameGap:34,axisLabel:{color:baseChart().textStyle.color,formatter:axisPercent},splitLine:{lineStyle:{color:getComputedStyle(document.documentElement).getPropertyValue('--chart-line').trim()}}},yAxis:{type:'value',name:t('Доходность, % / год'),axisLabel:{color:baseChart().textStyle.color,formatter:axisPercent},splitLine:{lineStyle:{color:getComputedStyle(document.documentElement).getPropertyValue('--chart-line').trim()}}},series:[{name:t('Эффективная граница'),type:'line',data:frontier.map(p=>[p.risk*100,p.return*100]),symbol:'none',lineStyle:{color:colors[0],width:3},z:1},...portfolios.map(p=>({name:portfolioName(p),type:'scatter',data:[[p.risk*100,p.return*100]],symbolSize:p.id==='current'?15:12,itemStyle:{color:p.color,borderColor:baseChart().backgroundColor,borderWidth:2},z:3}))]},true);
   renderWeights();
   const useMoney=view==='wealth';
-  chart('equity-chart').setOption({...baseChart('equity-chart'),color:portfolios.map(p=>p.color),legend:{top:0,type:'scroll',textStyle:{fontSize:12,color:baseChart().textStyle.color},itemWidth:16,itemHeight:3},tooltip:{...baseChart().tooltip,trigger:'axis',formatter:items=>escape(items[0]?.axisValue??'')+tooltipRows(items,p=>useMoney?money(p.value):percent(p.value/100))},grid:{left:useMoney?90:60,right:25,top:50,bottom:55},xAxis:{type:'category',boundaryGap:false,data:model.dates,axisLabel:{color:baseChart().textStyle.color,formatter:s=>s.slice(0,7),hideOverlap:true},axisLine:{lineStyle:{color:getComputedStyle(document.documentElement).getPropertyValue('--chart-line').trim()}}},yAxis:{type:'value',scale:view==='wealth',axisLabel:{color:baseChart().textStyle.color,formatter:v=>useMoney?number(v/1000)+t(' тыс.'):axisPercent(v)+'%'},splitLine:{lineStyle:{color:getComputedStyle(document.documentElement).getPropertyValue('--chart-line').trim()}}},dataZoom:[{type:'inside'},{type:'slider',height:15,bottom:5,borderColor:getComputedStyle(document.documentElement).getPropertyValue('--chart-line').trim(),fillerColor:theme==='dark'?'#365449':'#d8e5da',handleSize:14}],series:portfolios.map(p=>{const s=stat(p);return {name:portfolioName(p),type:'line',data:view==='wealth'?s.wealth.map(v=>v*capital):view==='return'?s.wealth.map(v=>(v-1)*100):s.drawdown.map(v=>v*100),symbol:'none',lineStyle:{width:p.id==='current'?3:2},emphasis:{focus:'series'}};})},true);
+  chart('equity-chart').setOption({...baseChart('equity-chart'),color:portfolios.map(p=>p.color),legend:{top:0,type:'scroll',textStyle:{fontSize:12,color:baseChart().textStyle.color},itemWidth:16,itemHeight:3},tooltip:{...baseChart().tooltip,trigger:'axis',formatter:items=>escape(items[0]?.axisValue??'')+tooltipRows(items,p=>useMoney?money(p.value):percent(p.value/100))},grid:{left:useMoney?90:60,right:25,top:50,bottom:55},xAxis:{type:'category',boundaryGap:false,data:model.dates,axisLabel:{color:baseChart().textStyle.color,formatter:s=>s.slice(0,7),hideOverlap:true},axisLine:{lineStyle:{color:chartLine}}},yAxis:{type:'value',scale:view==='wealth',axisLabel:{color:baseChart().textStyle.color,formatter:v=>useMoney?number(v/1000)+t(' тыс.'):axisPercent(v)+'%'},splitLine:{lineStyle:{color:chartLine}}},dataZoom:[{type:'inside'},{type:'slider',height:15,bottom:5,borderColor:chartLine,fillerColor:accentSoft,handleStyle:{color:accent,borderColor:accent},moveHandleStyle:{color:accent},handleSize:14}],series:portfolios.map(p=>{const s=stat(p);return {name:portfolioName(p),type:'line',data:view==='wealth'?s.wealth.map(v=>v*capital):view==='return'?s.wealth.map(v=>(v-1)*100):s.drawdown.map(v=>v*100),symbol:'none',lineStyle:{width:p.id==='current'?3:2},emphasis:{focus:'series'}};})},true);
 }
 function renderWeights() {
   const ps=$('weights-view').value==='compare'?visiblePortfolios():[current];
@@ -87,7 +90,7 @@ function renderWeights() {
   $('weights-chart').style.height=height+'px';
   const titles=ps.length>1?ps.map((p,i)=>({text:portfolioName(p),left:(i%cols+.5)*100/cols+'%',top:Math.floor(i/cols)*230+8,textAlign:'center',textStyle:{fontSize:12,fontWeight:500,width:180,overflow:'truncate',color:p.color}})):[];
   chart('weights-chart').resize();
-  chart('weights-chart').setOption({...baseChart('weights-chart'),color:colors,title:titles,tooltip:{...baseChart().tooltip,trigger:'item',formatter:p=>`${escape(p.seriesName)}<br>${escape(p.name)}: <b>${percent(p.value/100)}</b>`},legend:ps.length===1?{type:'scroll',bottom:0,textStyle:{fontSize:12,color:baseChart().textStyle.color},itemWidth:9,itemHeight:9}:undefined,graphic:ps.length===1?[{type:'text',left:'center',top:'43%',style:{text:'100%',fontSize:28,fontWeight:600,fill:colors[0]}},{type:'text',left:'center',top:'55%',style:{text:t('капитала'),fontSize:12,fill:baseChart().textStyle.color}}]:[],series:ps.map((p,i)=>({name:portfolioName(p),type:'pie',radius:ps.length===1?['47%','71%']:[42,70],center:ps.length===1?['50%','46%']:[(i%cols+.5)*100/cols+'%',Math.floor(i/cols)*230+112],itemStyle:{borderColor:baseChart().backgroundColor,borderWidth:3,borderRadius:3},label:{show:false},emphasis:{scale:true,label:{show:ps.length>1,position:'center',formatter:'{b}\n{d}%',fontSize:12,color:baseChart().textStyle.color}},data:indicatorNames().map((name,j)=>({name,value:p.weights[j]*100,itemStyle:{color:colors[j]}})).filter(x=>x.value>1e-7)}))},true);
+  chart('weights-chart').setOption({...baseChart('weights-chart'),color:colors,title:titles,tooltip:{...baseChart().tooltip,trigger:'item',formatter:p=>`${escape(p.seriesName)}<br>${escape(p.name)}: <b>${percent(p.value/100)}</b>`},legend:ps.length===1?{type:'scroll',bottom:0,textStyle:{fontSize:12,color:baseChart().textStyle.color},itemWidth:9,itemHeight:9}:undefined,graphic:ps.length===1?[{type:'text',left:'center',top:'43%',style:{text:'100%',fontFamily:'IBM Plex Mono, monospace',fontSize:28,fontWeight:600,fill:colors[0]}},{type:'text',left:'center',top:'55%',style:{text:t('капитала'),fontFamily:'IBM Plex Sans, Arial, sans-serif',fontSize:12,fill:baseChart().textStyle.color}}]:[],series:ps.map((p,i)=>({name:portfolioName(p),type:'pie',radius:ps.length===1?['47%','71%']:[42,70],center:ps.length===1?['50%','46%']:[(i%cols+.5)*100/cols+'%',Math.floor(i/cols)*230+112],itemStyle:{borderColor:baseChart().backgroundColor,borderWidth:3,borderRadius:3},label:{show:false},emphasis:{scale:true,label:{show:ps.length>1,position:'center',formatter:'{b}\n{d}%',fontSize:12,color:baseChart().textStyle.color}},data:indicatorNames().map((name,j)=>({name,value:p.weights[j]*100,itemStyle:{color:colors[j]}})).filter(x=>x.value>1e-7)}))},true);
 }
 function savePortfolio() {
   if(saved.length>=8)throw Error('Можно сравнивать до 8 сохранённых портфелей. Удалите один, чтобы добавить новый.');
@@ -157,7 +160,10 @@ function indicatorNames() {
 function preferenceLabels() {
   $('language-button').textContent=language==='ru'?'EN':'RU';
   $('language-button').setAttribute('aria-label',t(language==='ru'?'Переключить на английский':'Переключить на русский'));
-  $('theme-button').textContent=(theme==='light'?'☾ ':'☀ ')+t(theme==='light'?'Тёмная тема':'Светлая тема');
+  const themeLabel=t(theme==='light'?'Тёмная тема':'Светлая тема');
+  const themeIcon=theme==='light'?'<path d="M20.4 14.5A8.5 8.5 0 0 1 9.5 3.6 8.5 8.5 0 1 0 20.4 14.5Z"/>':'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  $('theme-button').innerHTML=`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${themeIcon}</svg><span class="sr-only">${theme==='light'?'☾ ':'☀ '}${escape(themeLabel)}</span>`;
+  $('theme-button').setAttribute('aria-label',themeLabel);
   $('theme-button').setAttribute('aria-pressed',String(theme==='dark'));
 }
 captureStaticTranslations();setTheme(theme);translateStatic();preferenceLabels();
@@ -181,6 +187,13 @@ $('template-button').addEventListener('click',guarded(template));
 $('export-button').addEventListener('click',guarded(exportResults));
 document.querySelectorAll('[data-download]').forEach(button=>button.addEventListener('click',guarded(()=>exportChart(button.dataset.download))));
 $('file-input').addEventListener('change',guarded(async e=>{try{await upload(e.target.files[0]);}finally{e.target.value='';}}));
+const uploadFrame=$('upload-frame');
+let uploadDragDepth=0;
+uploadFrame.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file-input').click();}});
+uploadFrame.addEventListener('dragenter',e=>{e.preventDefault();uploadDragDepth++;uploadFrame.classList.add('dragging');});
+uploadFrame.addEventListener('dragover',e=>{e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';});
+uploadFrame.addEventListener('dragleave',e=>{e.preventDefault();uploadDragDepth=Math.max(0,uploadDragDepth-1);if(!uploadDragDepth)uploadFrame.classList.remove('dragging');});
+uploadFrame.addEventListener('drop',guarded(async e=>{e.preventDefault();uploadDragDepth=0;uploadFrame.classList.remove('dragging');await upload(e.dataTransfer?.files[0]);}));
 $('demo-button').addEventListener('click',guarded(()=>{data=demoData();model=null;signature='';saved=[];$('frequency').value='12';$('first-indicator').value='m2';$('mode').value='sharpe';$('rf').value='8';$('capital').value='1000000';modeFields();calculate({quiet:true,initial:true});message('Учебные данные восстановлены.');}));
 $('comparison-cards').addEventListener('change',e=>{const p=saved.find(p=>p.id===e.target.dataset.toggle);if(p){p.visible=e.target.checked;renderCharts();}});
 $('comparison-cards').addEventListener('click',e=>{const id=e.target.dataset.remove;if(id){saved=saved.filter(p=>p.id!==id);renderComparison();renderCharts();}});
@@ -198,3 +211,4 @@ new ResizeObserver(()=>{
 }).observe(document.querySelector('.results'));
 modeFields();
 try {if(!window.echarts||!window.XLSX)throw Error(t('Не загрузились библиотеки графиков или Excel. Перезапустите приложение.'));calculate({quiet:true,initial:true});}catch(e){message(e.message,true);}
+document.fonts.ready.then(()=>requestAnimationFrame(()=>{if(current){Object.values(charts).forEach(c=>c.resize());renderCharts();}}));
