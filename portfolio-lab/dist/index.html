@@ -1,138 +1,126 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Портфельная лаборатория — бизнес-аналитика и прогнозирование</title>
   <meta name="description" content="Оптимизация десяти индикаторов по Марковицу и Шарпу, эффективная граница и сравнение реальной доходности портфелей.">
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('portfolio-theme')==='dark'?'dark':'light';}catch{document.documentElement.dataset.theme='light';}</script>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="fonts.css">
-  <link rel="stylesheet" href="style.css">
-  <script defer src="vendor/echarts.min.js"></script>
-  <script defer src="vendor/xlsx.full.min.js"></script>
-  <script type="module" src="app.js"></script>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="style.css">
+  <script defer src="vendor/echarts.min.js"></script><script defer src="vendor/xlsx.full.min.js"></script><script type="module" src="app.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="wrap top-inner">
-      <a class="brand" href="#" aria-label="Портфельная лаборатория">
-        <svg class="brand-logo" viewBox="0 0 32 32" aria-hidden="true">
-          <rect width="32" height="32" rx="3" class="lg-bg"/>
-          <g class="lg-px"><path d="M6 20h5v6H6zM13 13h5v13h-5z"/><path opacity=".45" d="M6 13h5v5H6zM13 6h5v5h-5z"/></g>
-          <path class="lg-ac" d="M20 6h6v20h-6z"/>
-        </svg>
-        <span class="brand-name">portfolio</span>
-        <span class="brand-sub">учебная лаборатория</span>
-      </a>
-      <nav class="nav" aria-label="Разделы приложения">
-        <a href="#lab">Рассчитать</a>
-        <a href="#analysis">Анализ</a>
-        <a href="#comparison">Сравнение</a>
-      </nav>
-      <div class="preferences">
-        <div class="status"><span class="dot"></span><span id="data-status">Учебные данные</span></div>
-        <button class="icon-button" id="language-button" type="button" aria-label="Переключить на английский">EN</button>
-        <button class="icon-button" id="theme-button" type="button" aria-label="Тёмная тема" aria-pressed="false">☾</button>
-      </div>
-    </div>
-  </header>
-  <main>
-    <section class="intro wrap">
-      <p class="kicker"><span>01</span> Портфельная лаборатория</p>
-      <h1>Доходность <em>и</em> риск.</h1>
-      <p class="subtitle">Найдите баланс доходности и риска с учётом инфляции. Загрузите данные, выберите критерий и сравните портфели на интерактивных графиках.</p>
-      <dl class="facts">
-        <div><dt>индикаторов</dt><dd>10</dd></div>
-        <div><dt>критерия оптимизации</dt><dd>4</dd></div>
-        <div><dt>рублёвая масса · индикатор 1</dt><dd>М2</dd></div>
-        <div><dt>поправка на инфляцию</dt><dd>ИПЦ</dd></div>
-      </dl>
-    </section>
-    <section class="lab wrap" id="lab" aria-label="Расчёт портфеля">
-      <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+  <header class="topbar"><div class="top-inner wrap">
+    <a class="brand" href="#portfolio" data-open-tab="portfolio" aria-label="Портфельная лаборатория"><svg class="brand-logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="3" class="lg-bg"/><g class="lg-px"><path d="M6 20h5v6H6zM13 13h5v13h-5z"/><path opacity=".45" d="M6 13h5v5H6zM13 6h5v5h-5z"/></g><path class="lg-ac" d="M20 6h6v20h-6z"/></svg><span class="brand-name">Портфельная лаборатория</span></a>
+    <span class="course">Бизнес-аналитика и прогнозирование</span>
+    <div class="preferences"><span class="status"><span class="dot"></span><span id="data-status">Учебные данные</span></span><button class="icon-button" id="language-button" type="button" aria-label="Переключить на английский">EN</button><button class="icon-button" id="theme-button" type="button" aria-label="Тёмная тема" aria-pressed="false">☾</button><button class="button ghost" id="method-button" type="button">Методика расчёта</button></div>
+  </div></header>
+  <main class="app-main wrap">
+    <div class="page-heading"><div><p class="eyebrow">АНАЛИЗ ПОРТФЕЛЯ / 10 ИНДИКАТОРОВ</p><h1>Доходность под контролем.</h1><p class="subtitle">Найдите баланс доходности и риска с учётом инфляции.</p></div><button class="button" data-open-tab="data" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 16v5h14v-5"/></svg>Загрузить Excel</button></div>
+    <div class="dataset-strip"><span class="badge" id="data-badge">Учебные данные</span><span id="data-info"></span><span class="pill">Индикатор 1 — М2</span></div>
+    <nav class="app-tabs" role="tablist" aria-label="Разделы приложения">
+      <button type="button" role="tab" id="tab-portfolio" aria-controls="panel-portfolio" aria-selected="true" tabindex="0" data-tab="portfolio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Портфель</button>
+      <button type="button" role="tab" id="tab-graphs" aria-controls="panel-graphs" aria-selected="false" tabindex="-1" data-tab="graphs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M7 15l4-5 4 3 5-7"/></svg>Графики</button>
+      <button type="button" role="tab" id="tab-comparison" aria-controls="panel-comparison" aria-selected="false" tabindex="-1" data-tab="comparison"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M16 4v16M3 8h10M11 16h10"/></svg>Сравнение<span class="tab-counter" id="comparison-count">0</span></button>
+      <button type="button" role="tab" id="tab-backtest" aria-controls="panel-backtest" aria-selected="false" tabindex="-1" data-tab="backtest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M7 15l4-5 4 3 5-7M12 4v16"/></svg>Проверка</button>
+      <button type="button" role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1" data-tab="data"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></svg>Данные</button>
+    </nav>
+    <div id="global-message-slot"><div id="message" class="message" role="status" aria-live="polite" hidden></div></div>
+    <section id="panel-portfolio" class="tab-panel" role="tabpanel" aria-labelledby="tab-portfolio">
       <div class="workspace">
-        <aside class="control-panel">
-          <label class="upload-frame" id="upload-frame" for="file-input" tabindex="0" role="button" aria-label="Загрузить Excel">
-            <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
-            <span class="upload-content">
-              <svg class="upload-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 30V8M15 17l9-9 9 9"/><path d="M8 28v10a2 2 0 0 0 2 2h28a2 2 0 0 0 2-2V28"/></svg>
-              <span class="frame-title" id="upload-status" style="display:block">Перетащите Excel сюда</span>
-              <span class="frame-hint" style="display:block">или нажмите, чтобы выбрать файл</span>
-              <span class="frame-formats" style="display:block">XLSX · XLS · до 10 МБ</span>
-            </span>
-          </label>
-          <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
-          <div class="heading-actions">
-            <label class="button" for="file-input"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Загрузить Excel</label>
-            <button class="button" id="template-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 17v4h14v-4"/></svg>Скачать Excel-шаблон</button>
-          </div>
-          <div class="dataset-strip"><span class="badge" id="data-badge">Учебные данные</span><span id="data-info"></span><button id="demo-button" class="text-button" type="button">Вернуть учебный пример</button></div>
-          <p id="demo-note" class="data-note">Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите Excel. Цены валют и активов должны быть выражены в рублях.</p>
-          <div class="panel-heading"><h2>Настройки портфеля</h2><span class="small-index">01 — 04</span></div>
+        <aside class="control-panel panel">
+          <div class="panel-heading"><h2>Настройки портфеля</h2><span class="small-index">01</span></div>
           <form id="optimization-form">
-            <div class="criterion-field">
-              <label for="mode">Критерий оптимизации</label>
-              <select id="mode"><option value="markowitz">Критерий Марковица</option><option value="sharpe" selected>Максимум коэффициента Шарпа</option><option value="risk">Эффективный риск</option><option value="return">Эффективная доходность</option></select>
-              <p id="mode-description" class="field-help"></p>
-            </div>
-            <div class="field criterion-field" id="lambda-field" hidden><label for="lambda">Неприятие риска λ</label><input id="lambda" type="number" min="0" step="0.1" value="3"></div>
-            <div class="field criterion-field" id="target-return-field" hidden><label for="target-return">Минимальная доходность, % / год</label><input id="target-return" type="number" step="0.1" value="10"></div>
-            <div class="field criterion-field" id="target-risk-field" hidden><label for="target-risk">Максимальный риск, % / год</label><input id="target-risk" type="number" min="0" step="0.1" value="20"></div>
+            <label for="mode">Критерий оптимизации</label><select id="mode"><option value="markowitz">Критерий Марковица</option><option value="sharpe" selected>Максимум коэффициента Шарпа</option><option value="risk">Эффективный риск</option><option value="return">Эффективная доходность</option></select><p id="mode-description" class="field-help"></p>
+            <div class="field" id="lambda-field" hidden><label for="lambda">Неприятие риска λ</label><input id="lambda" type="number" min="0" step="0.1" value="3"></div>
+            <div class="field" id="target-return-field" hidden><label for="target-return">Минимальная доходность, % / год</label><input id="target-return" type="number" step="0.1" value="10"></div>
+            <div class="field" id="target-risk-field" hidden><label for="target-risk">Максимальный риск, % / год</label><input id="target-risk" type="number" min="0" step="0.1" value="20"></div>
             <div class="field"><label for="capital">Начальный капитал, ₽</label><input id="capital" type="number" min="1" step="1" value="1000000" required></div>
-            <div class="field"><label for="rf">Безрисковая ставка, % / год</label><input id="rf" type="number" min="-99.9" step="0.1" value="8" required><p class="field-help">Номинальная ставка; для Шарпа автоматически корректируется на инфляцию.</p></div>
-            <div class="field criterion-field"><label for="frequency">Периодичность наблюдений</label><select id="frequency"><option value="12">Месячная · 12 периодов в год</option><option value="252">Дневная · 252 периода в год</option><option value="1">Годовая · 1 период в год</option></select></div>
-            <div class="fixed-indicator"><span>01</span><div><strong>Индикатор 1 — рублёвая масса М2</strong><p class="field-help">Первый ряд Excel — уровни М2. Рост денежной массы используется как учебный индикатор.</p></div><label class="sr-only" for="first-indicator">Индикатор 1</label><select id="first-indicator" disabled hidden><option value="m2">Рублёвая масса М2 / ряд из файла</option></select></div>
-            <button class="button primary full" type="submit" id="calculate-button">Рассчитать портфель <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            <details class="advanced-settings" id="advanced-settings"><summary>Дополнительные настройки</summary>
+              <div class="field"><label for="rf">Безрисковая ставка, % / год</label><input id="rf" type="number" min="-99.9" step="0.1" value="8" required><p class="field-help">Номинальная ставка; для Шарпа автоматически корректируется на инфляцию.</p></div>
+              <div class="field"><label for="frequency">Периодичность наблюдений</label><select id="frequency"><option value="12">Месячная · 12 периодов в год</option><option value="252">Дневная · 252 периода в год</option><option value="1">Годовая · 1 период в год</option></select></div>
+              <div class="fixed-indicator"><strong>Индикатор 1 — рублёвая масса М2</strong><p class="field-help">Первый ряд Excel — уровни М2. Рост денежной массы используется как учебный индикатор.</p></div>
+            </details>
+            <label class="sr-only" for="first-indicator">Индикатор 1</label><select id="first-indicator" disabled hidden><option value="m2">Рублёвая масса М2 / ряд из файла</option></select>
+            <button class="button primary full" type="submit" id="calculate-button">Рассчитать портфель</button>
           </form>
           <div class="constraints"><span>Без коротких продаж</span><strong>Σ весов = 100%</strong><span>Ребалансировка каждый период</span></div>
+          <button class="text-button sidebar-link" type="button" data-open-tab="data">Посмотреть индикаторы</button>
         </aside>
         <section class="results" aria-label="Результат оптимизации">
-          <div class="result-heading"><p class="eyebrow">ТЕКУЩИЙ РЕЗУЛЬТАТ</p><h2 id="current-title">Максимум Шарпа</h2><button id="save-button" class="button" type="button">Добавить к сравнению</button></div>
+          <div class="result-heading"><div><p class="eyebrow">ТЕКУЩИЙ РЕЗУЛЬТАТ</p><h2 id="current-title">Максимум Шарпа</h2></div><button id="save-button" class="button" type="button">Добавить к сравнению</button></div>
           <div class="metrics-grid">
             <article class="metric-card featured"><span>Ожидаемый доход за год</span><strong id="expected-income">—</strong><small id="expected-rate">—</small></article>
             <article class="metric-card"><span>Ожидаемая волатильность</span><strong id="risk-value">—</strong><small>Годовое стандартное отклонение</small></article>
             <article class="metric-card"><span>Максимальная просадка</span><strong id="drawdown-value">—</strong><small>По исторической кривой</small></article>
             <article class="metric-card"><span>Макс. период восстановления</span><strong id="recovery-value">—</strong><small id="recovery-note">Завершённые восстановления</small></article>
           </div>
-          <article class="weights-panel">
-            <div class="panel-heading"><div><h2>Структура портфеля</h2><p>Доли десяти индикаторов</p></div><span class="small-index">Σ = 100%</span></div>
-            <label class="sr-only" for="weights-view">Портфель для диаграммы</label>
-            <select id="weights-view"><option value="current">Текущий портфель</option><option value="compare">Сравнить все портфели</option></select>
-            <div id="weights-chart" class="chart" role="img" aria-label="Интерактивные круговые диаграммы весов"></div>
-            <button class="button chart-download" type="button" data-download="weights-chart">Скачать рисунок SVG</button>
-          </article>
+          <div class="chart-row">
+            <article class="panel frontier-panel"><div class="panel-heading"><div><h2>Эффективная граница</h2><p>Реальная доходность и годовой риск</p></div></div><div id="frontier-chart" class="chart" role="img" aria-label="Эффективная граница и текущий портфель"></div><button class="button chart-download" type="button" data-download="frontier-chart">Скачать рисунок SVG</button></article>
+            <article class="panel weights-panel"><div class="panel-heading"><div><h2>Структура портфеля</h2><p>Доли десяти индикаторов</p></div></div><label class="sr-only" for="weights-view">Портфель для диаграммы</label><select id="weights-view" disabled hidden><option value="current">Текущий портфель</option></select><div id="weights-chart" class="chart" role="img" aria-label="Интерактивная круговая диаграмма весов текущего портфеля"></div><button class="button chart-download" type="button" data-download="weights-chart">Скачать рисунок SVG</button></article>
+          </div>
+          <article class="panel equity-panel"><div class="panel-heading"><div><h2>Кривая доходности портфеля</h2><p>Историческая динамика покупательной способности</p></div><div class="segmented" role="group" aria-label="Вид кривой"><button data-view="wealth" type="button">Капитал, ₽</button><button data-view="return" type="button" class="active">Доходность, %</button><button data-view="drawdown" type="button">Просадка, %</button></div></div><div id="equity-chart" class="chart" role="img" aria-label="Кривая текущего портфеля"></div><button class="button chart-download" type="button" data-download="equity-chart">Скачать рисунок SVG</button></article>
+          <p class="chart-note dashboard-note">Все доходности скорректированы на инфляцию. Отдельные рисунки и общий график сравнения доступны во вкладке «Графики».</p>
         </section>
       </div>
     </section>
-    <section class="analysis-section" id="analysis">
-      <div class="wrap">
-        <div class="section-heading"><p class="kicker"><span>02</span> Как работает портфель</p><h2>Как капитал <em>ведёт себя</em></h2><p>Сравните риск и доходность на эффективной границе, проследите динамику портфеля и его восстановление после просадок. Все доходности скорректированы на инфляцию.</p></div>
-        <div class="chart-row">
-          <article class="panel frontier-panel"><div class="panel-heading"><div><h2>Эффективная граница</h2><p>Реальная доходность и годовой риск</p></div><span class="small-index">01</span></div><div id="frontier-chart" class="chart" role="img" aria-label="Эффективная граница и сравниваемые портфели"></div><button class="button chart-download" type="button" data-download="frontier-chart">Скачать рисунок SVG</button><p class="chart-note">Точки на границе дают минимальный риск для соответствующей доходности.</p></article>
-          <article class="panel criteria-panel"><div class="panel-heading"><div><h2>Четыре критерия</h2><p>Четыре способа найти баланс</p></div><span class="small-index">01 — 04</span></div><ol>
-            <li><span>01</span><div><strong>Критерий Марковица</strong><p>μᵀw − λwᵀΣw → max</p></div></li>
-            <li><span>02</span><div><strong>Максимум коэффициента Шарпа</strong><p>(μᵀw − r𝒇) / σ → max</p></div></li>
-            <li><span>03</span><div><strong>Эффективный риск</strong><p>σ² → min · μᵀw ≥ μ*</p></div></li>
-            <li><span>04</span><div><strong>Эффективная доходность</strong><p>μᵀw → max · σ ≤ σ*</p></div></li>
-          </ol><p class="formula">rᵣₑₐₗ,t = (Pₜ / Pₜ₋₁) / (ИПЦₜ / ИПЦₜ₋₁) − 1</p></article>
-        </div>
-        <article class="panel equity-panel"><div class="panel-heading"><div><h2>Кривая доходности портфеля</h2><p>Историческая динамика покупательной способности</p></div><div class="segmented" role="group" aria-label="Вид кривой"><button data-view="wealth" type="button">Капитал, ₽</button><button data-view="return" type="button" class="active">Доходность, %</button><button data-view="drawdown" type="button">Просадка, %</button></div></div><div id="equity-chart" class="chart" role="img" aria-label="Сравнение кривых портфелей"></div><button class="button chart-download" type="button" data-download="equity-chart">Скачать рисунок SVG</button><p class="chart-note">Расчёт на той же выборке, что и оптимизация: это историческая иллюстрация, а не проверка прогноза на новых данных.</p></article>
+    <section id="panel-graphs" class="tab-panel" role="tabpanel" aria-labelledby="tab-graphs" hidden>
+      <div class="tab-heading"><div><h2>Рисунки и показатели</h2><p>Выберите портфель: каждый рисунок показывает только его. Общий график сравнения находится в конце вкладки.</p></div><button class="button" type="button" data-scroll-target="report-comparison">Перейти к сравнению</button></div>
+      <div class="report-toolbar panel"><div><label for="report-portfolio">Портфель для отдельных рисунков</label><select id="report-portfolio"><option value="current">Текущий портфель</option></select></div><span class="pill">С учётом инфляции</span></div>
+      <div class="metrics-grid report-metrics">
+        <article class="metric-card featured"><span>Ожидаемый доход за год</span><strong id="report-income">—</strong><small id="report-rate">—</small></article>
+        <article class="metric-card"><span>Ожидаемая волатильность</span><strong id="report-risk">—</strong><small>Годовое стандартное отклонение</small></article>
+        <article class="metric-card"><span>Максимальная просадка</span><strong id="report-drawdown">—</strong><small>По исторической кривой</small></article>
+        <article class="metric-card"><span>Макс. период восстановления</span><strong id="report-recovery">—</strong><small id="report-recovery-note">—</small></article>
+      </div>
+      <div class="report-stats"><div><span>CAGR</span><strong id="report-cagr">—</strong></div><div><span>Историческая доходность</span><strong id="report-total-return">—</strong></div><div><span>Шарп</span><strong id="report-sharpe">—</strong></div><div><span>Капитал на конец периода</span><strong id="report-final-capital">—</strong></div></div>
+      <div class="report-grid">
+        <article class="panel"><div class="panel-heading"><div><h2>Эффективная граница</h2><p>Граница и выбранный портфель</p></div><span class="small-index">01</span></div><div id="report-frontier-chart" class="chart" role="img" aria-label="Эффективная граница выбранного портфеля"></div><button class="button chart-download" data-download="report-frontier-chart" type="button">Скачать рисунок SVG</button></article>
+        <article class="panel"><div class="panel-heading"><div><h2>Кривая доходности портфеля</h2><p>Накопленная реальная доходность</p></div><span class="small-index">02</span></div><div id="report-return-chart" class="chart" role="img" aria-label="Доходность выбранного портфеля"></div><button class="button chart-download" data-download="report-return-chart" type="button">Скачать рисунок SVG</button></article>
+        <article class="panel"><div class="panel-heading"><div><h2>Структура портфеля</h2><p>Наведите курсор на сектор, чтобы увидеть его вес</p></div><span class="small-index">03</span></div><div id="report-weights-chart" class="chart" role="img" aria-label="Интерактивная круговая диаграмма выбранного портфеля"></div><button class="button chart-download" data-download="report-weights-chart" type="button">Скачать рисунок SVG</button></article>
+        <article class="panel"><div class="panel-heading"><div><h2>Реальный капитал</h2><p>Стоимость портфеля в покупательной способности на начало периода</p></div><span class="small-index">04</span></div><div id="report-capital-chart" class="chart" role="img" aria-label="Капитал выбранного портфеля"></div><button class="button chart-download" data-download="report-capital-chart" type="button">Скачать рисунок SVG</button></article>
+        <article class="panel"><div class="panel-heading"><div><h2>Просадки портфеля</h2><p>Отклонение от предыдущего максимума</p></div><span class="small-index">05</span></div><div id="report-drawdown-chart" class="chart" role="img" aria-label="Просадки выбранного портфеля"></div><button class="button chart-download" data-download="report-drawdown-chart" type="button">Скачать рисунок SVG</button></article>
+        <article class="panel"><div class="panel-heading"><div><h2>Восстановление после просадок</h2><p>Календарные дни ниже предыдущего пика</p></div><span class="small-index">06</span></div><div id="report-recovery-chart" class="chart" role="img" aria-label="Восстановление выбранного портфеля"></div><button class="button chart-download" data-download="report-recovery-chart" type="button">Скачать рисунок SVG</button></article>
+      </div>
+      <article class="panel report-comparison" id="report-comparison"><div class="panel-heading"><div><p class="eyebrow">ОБЩИЙ ГРАФИК</p><h2>Сравнение портфелей</h2><p>Текущий и сохранённые портфели на одном графике</p></div><div class="comparison-view"><label for="report-comparison-view">Что сравнить</label><select id="report-comparison-view"><option value="return">Доходность, %</option><option value="wealth">Капитал, ₽</option><option value="drawdown">Просадка, %</option><option value="recovery">Восстановление, дни</option><option value="frontier">Риск и доходность</option><option value="weights">Веса индикаторов</option></select></div></div><div id="report-comparison-chart" class="chart" role="img" aria-label="Общий график сравнения портфелей"></div><button class="button chart-download" data-download="report-comparison-chart" type="button">Скачать рисунок SVG</button><button class="text-button" data-open-tab="comparison" type="button">Выбрать портфели для сравнения</button></article>
+    </section>
+    <section id="panel-comparison" class="tab-panel" role="tabpanel" aria-labelledby="tab-comparison" hidden>
+      <div class="tab-heading"><div><h2>Сравнение портфелей</h2><p>Начните с кнопки «Сравнить 4 критерия» или добавьте нужный вариант из карточек ниже.</p></div><div class="heading-actions"><button id="compare-all-button" class="button primary" type="button">Сравнить 4 критерия</button><button id="export-button" class="button" type="button">Скачать результаты Excel</button></div></div>
+      <div class="comparison-context panel"><div><strong>Общие параметры из последнего расчёта</strong><p id="comparison-context"></p></div><button class="text-button" type="button" data-open-tab="portfolio">Изменить общие настройки</button></div>
+      <div class="criterion-cards">
+        <article class="criterion-card panel"><div class="criterion-card-heading"><span class="criterion-number">01</span><span class="criterion-status" data-criterion-status="markowitz">Ещё не добавлен</span></div><h3>Марковиц</h3><p>Баланс доходности и риска</p><div class="criterion-parameter"><label for="compare-lambda">Осторожность λ</label><input id="compare-lambda" type="number" min="0" step="0.1" value="3"><small>Чем больше λ, тем меньше риск.</small></div><button class="button" type="button" data-add-criterion="markowitz" aria-label="Рассчитать и добавить портфель Марковица">Рассчитать и добавить</button></article>
+        <article class="criterion-card panel"><div class="criterion-card-heading"><span class="criterion-number">02</span><span class="criterion-status" data-criterion-status="sharpe">Ещё не добавлен</span></div><h3>Максимум Шарпа</h3><p>Доходность на единицу риска</p><div class="criterion-parameter"><span class="parameter-label">Безрисковая ставка, % / год</span><strong class="parameter-value" id="comparison-rf">—</strong><small>Ставка из общих настроек; инфляция учитывается автоматически.</small></div><button class="button" type="button" data-add-criterion="sharpe" aria-label="Рассчитать и добавить портфель Шарпа">Рассчитать и добавить</button></article>
+        <article class="criterion-card panel"><div class="criterion-card-heading"><span class="criterion-number">03</span><span class="criterion-status" data-criterion-status="risk">Ещё не добавлен</span></div><h3>Эффективный риск</h3><p>Минимальный риск для заданного дохода</p><div class="criterion-parameter"><label for="compare-target-return">Минимальная доходность, % / год</label><input id="compare-target-return" type="number" step="0.1" value="10"><small id="comparison-return-limit"></small></div><button class="button" type="button" data-add-criterion="risk" aria-label="Рассчитать и добавить портфель эффективного риска">Рассчитать и добавить</button></article>
+        <article class="criterion-card panel"><div class="criterion-card-heading"><span class="criterion-number">04</span><span class="criterion-status" data-criterion-status="return">Ещё не добавлен</span></div><h3>Эффективная доходность</h3><p>Максимальный доход при ограничении риска</p><div class="criterion-parameter"><label for="compare-target-risk">Максимальный риск, % / год</label><input id="compare-target-risk" type="number" min="0" step="0.1" value="20"><small id="comparison-risk-limit"></small></div><button class="button" type="button" data-add-criterion="return" aria-label="Рассчитать и добавить портфель эффективной доходности">Рассчитать и добавить</button></article>
+      </div>
+      <div id="comparison-feedback-slot"></div>
+      <article class="panel comparison-panel"><div id="comparison-cards" class="comparison-cards"></div><div class="table-scroll"><table id="comparison-table"><caption class="sr-only">Показатели кривых и ожидаемые показатели портфелей</caption><thead><tr><th>Портфель</th><th>Ожид. доход, ₽ / год</th><th>Ожид. доходность</th><th>Волатильность</th><th>Шарп</th><th>CAGR</th><th>Истор. доходность</th><th>Макс. просадка</th><th>Макс. восстановление</th><th>Завершённое восстановление</th><th>Текущее восстановление</th></tr></thead><tbody></tbody></table></div><p class="chart-note">Восстановление измеряется календарными днями от пика до возврата к нему. Знак ≥ означает, что возврат ещё не произошёл и показана нижняя граница срока.</p><div class="panel-actions"><button class="button" data-open-tab="portfolio" type="button">Рассчитать другой портфель</button><button class="button" data-open-tab="graphs" data-scroll-target="report-comparison" type="button">Открыть общий график</button></div></article>
+    </section>
+    <section id="panel-backtest" class="tab-panel" role="tabpanel" aria-labelledby="tab-backtest" hidden>
+      <div class="tab-heading"><div><h2>Проверка на новом периоде</h2><p>Рассчитайте веса на первой части данных и проверьте их на следующей. Сравните результат с портфелем равных долей.</p></div></div>
+      <article class="panel backtest-settings">
+        <form id="backtest-form">
+          <div class="analysis-fields"><div class="field"><label for="backtest-split">Последняя дата обучения</label><input id="backtest-split" type="date" required><p class="field-help" id="backtest-period-hint"></p></div><div class="field"><label for="backtest-lambda">Неприятие риска λ</label><input id="backtest-lambda" type="number" min="0" step="0.1" value="3"></div><div class="field"><label for="backtest-target-return">Минимальная доходность, % / год</label><input id="backtest-target-return" type="number" step="0.1" value="8"></div><div class="field"><label for="backtest-target-risk">Максимальный риск, % / год</label><input id="backtest-target-risk" type="number" min="0" step="0.1" value="20"></div></div>
+          <p class="chart-note" id="backtest-context"></p><div class="panel-actions"><button class="button primary" id="backtest-run-button" type="submit">Проверить 4 критерия</button><button class="button" data-open-tab="data" type="button">Выбрать данные</button></div>
+        </form>
+      </article>
+      <div id="backtest-status" class="message" role="status" aria-live="polite" hidden></div>
+      <div id="backtest-results" hidden>
+        <div class="report-stats"><div><span>Обучающий период</span><strong id="backtest-train-period"></strong></div><div><span>Проверочный период</span><strong id="backtest-test-period"></strong></div><div><span>Начальный капитал</span><strong id="backtest-capital"></strong></div><div><span>Ставка для Шарпа</span><strong id="backtest-rf"></strong></div></div>
+        <article class="panel"><div class="panel-heading"><div><h2>Результаты проверки</h2><p>Доходность и риск ниже измерены только на проверочном периоде.</p></div><button class="button" id="backtest-export-button" type="button" disabled>Скачать проверку Excel</button></div><div class="table-scroll"><table id="backtest-table"><caption class="sr-only">Результаты портфелей на проверочных данных</caption><thead><tr><th>Портфель</th><th>Индикатор 1, %</th><th>Доходность на обучении / год</th><th>Фактическая средняя доходность / год</th><th>Итоговая доходность</th><th>CAGR</th><th>Волатильность</th><th>Шарп</th><th>Макс. просадка</th><th>Макс. восстановление</th><th>Капитал на конец периода</th></tr></thead><tbody></tbody></table></div><p class="chart-note">Веса определены на обучении; доли восстанавливаются каждый период, без комиссий. Ставка Шарпа скорректирована на инфляцию обучающего периода. Фактическая доходность на проверке не является прогнозом.</p></article>
+        <div class="report-grid backtest-charts"><article class="panel"><div class="panel-heading"><h2>Доходность на проверке</h2></div><div id="backtest-return-chart" class="chart" role="img" aria-label="Доходность портфелей на проверочном периоде"></div><button class="button chart-download" data-backtest-download="backtest-return-chart" type="button">Скачать рисунок SVG</button></article><article class="panel"><div class="panel-heading"><h2>Просадки на проверке</h2></div><div id="backtest-drawdown-chart" class="chart" role="img" aria-label="Просадки портфелей на проверочном периоде"></div><button class="button chart-download" data-backtest-download="backtest-drawdown-chart" type="button">Скачать рисунок SVG</button></article></div>
+        <article class="panel backtest-charts"><div class="panel-heading"><div><h2>Веса, рассчитанные на обучении</h2><p>Проверочные данные не влияют на эти доли.</p></div></div><div id="backtest-weights-chart" class="chart" role="img" aria-label="Сравнение весов обученных портфелей"></div><button class="button chart-download" data-backtest-download="backtest-weights-chart" type="button">Скачать рисунок SVG</button></article>
       </div>
     </section>
-    <section class="comparison-section wrap" id="comparison">
-      <p class="kicker"><span>03</span> Портфели и индикаторы</p>
-      <article class="comparison-panel"><div class="panel-heading"><div><h2>Сравнение портфелей</h2><p>Сохранённые портфели отображаются вместе на графиках. Флажок управляет видимостью.</p></div><button id="export-button" class="button" type="button">Скачать результаты Excel</button></div><div id="comparison-cards" class="comparison-cards"></div><div class="table-scroll"><table id="comparison-table"><caption class="sr-only">Показатели кривых и ожидаемые показатели портфелей</caption><thead><tr><th>Портфель</th><th>Ожид. доход, ₽ / год</th><th>Ожид. доходность</th><th>Волатильность</th><th>Шарп</th><th>CAGR</th><th>Истор. доходность</th><th>Макс. просадка</th><th>Макс. восстановление</th><th>Завершённое восстановление</th><th>Текущее восстановление</th></tr></thead><tbody></tbody></table></div><p class="chart-note">Восстановление измеряется календарными днями от пика до возврата к нему. Знак ≥ означает, что возврат ещё не произошёл и показана нижняя граница срока.</p></article>
-      <article class="indicators-panel"><div class="panel-heading"><div><h2>Исходные индикаторы</h2><p>Оценки после поправки на инфляцию; веса текущего портфеля</p></div><span class="pill">10 рядов</span></div><div class="table-scroll"><table id="indicators-table"><caption class="sr-only">Десять индикаторов и их показатели</caption><thead><tr><th>№</th><th>Индикатор</th><th>Ожид. доходность / год</th><th>Волатильность / год</th><th>Вес в портфеле</th></tr></thead><tbody></tbody></table></div></article>
+    <section id="panel-data" class="tab-panel" role="tabpanel" aria-labelledby="tab-data" hidden>
+      <div class="tab-heading"><div><h2>Данные и индикаторы</h2><p>Загрузите свои ряды или используйте учебный пример. Первый индикатор — рублёвая масса М2.</p></div><div class="heading-actions"><a class="button primary" id="example-download" href="examples/portfolio-example.xlsx" download="Пример_портфеля.xlsx">Скачать пример Excel</a><button class="button" id="template-button" type="button">Скачать Excel-шаблон</button></div></div>
+      <p class="example-note">Пример уже заполнен: 85 месяцев, ИПЦ и 10 индикаторов. Данные синтетические; после загрузки откройте «Сравнение» и нажмите «Сравнить 4 критерия».</p>
+      <div class="data-grid example-grid"><article class="panel"><span class="eyebrow">УЧЕБНЫЙ ПРИМЕР 01</span><h3>М2 — 90,67%</h3><p class="data-note">85 месяцев синтетических данных. Доля М2 получается при максимуме Шарпа со ставкой 8% годовых. Быстрая загрузка применяет нужные настройки.</p><div class="panel-actions"><button class="button primary" type="button" data-load-example="m2-90-67">Загрузить в анализ</button><a class="button" id="example-m2-90-download" href="examples/portfolio-m2-90-67.xlsx" download="Пример_М2_90_67.xlsx">Скачать Excel</a></div></article><article class="panel"><span class="eyebrow">УЧЕБНЫЙ ПРИМЕР 02</span><h3>М2 — 60,67%</h3><p class="data-note">85 месяцев синтетических данных. Доля М2 получается при максимуме Шарпа со ставкой 8% годовых. Быстрая загрузка применяет нужные настройки.</p><div class="panel-actions"><button class="button primary" type="button" data-load-example="m2-60-67">Загрузить в анализ</button><a class="button" id="example-m2-60-download" href="examples/portfolio-m2-60-67.xlsx" download="Пример_М2_60_67.xlsx">Скачать Excel</a></div></article></div>
+      <article class="panel online-panel"><div class="panel-heading"><div><h2>Загрузить официальные данные</h2><p>М2, четыре металла, три валюты, индекс Мосбиржи и RGBITR. ИПЦ учитывается автоматически.</p></div><span class="pill">ЦБ · Росстат · MOEX</span></div><form id="online-form"><div class="online-fields"><div class="field"><label for="online-from">Первый месяц</label><input id="online-from" type="month" min="2011-01" value="2020-01" required></div><div class="field"><label for="online-to">Последний месяц</label><input id="online-to" type="month" min="2011-01" value="2025-12" required></div><button class="button primary" id="online-load-button" type="submit">Загрузить статистику</button></div></form><p class="chart-note">От 13 до 121 месячного наблюдения. Используется последняя котировка месяца; пропуски не заполняются. Новые данные заменят текущую выборку и очистят сравнение.</p><p class="chart-note">Источники: <a href="https://www.cbr.ru/development/sxml/" target="_blank" rel="noopener">Банк России</a> · <a href="https://www.rosstat.gov.ru/statistics/price/" target="_blank" rel="noopener">Росстат</a> · <a href="https://www.moex.com/a2193" target="_blank" rel="noopener">MOEX ISS</a></p><div id="online-status" class="message" role="status" aria-live="polite" hidden></div><div id="online-provenance" class="source-details" hidden></div><button class="button" id="online-excel-button" type="button" hidden>Скачать загруженные данные Excel</button></article>
+      <div class="data-grid"><article class="panel import-panel"><label class="upload-frame" id="upload-frame" for="file-input" tabindex="0" role="button" aria-label="Загрузить Excel"><svg class="upload-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 30V8M15 17l9-9 9 9"/><path d="M8 28v10a2 2 0 0 0 2 2h28a2 2 0 0 0 2-2V28"/></svg><span class="frame-title" id="upload-status">Перетащите Excel сюда</span><span class="frame-hint">или нажмите, чтобы выбрать файл</span><span class="frame-formats">XLSX · XLS · до 10 МБ</span></label><input type="file" id="file-input" accept=".xlsx,.xls" hidden><div class="panel-actions"><button id="demo-button" class="button" type="button">Вернуть учебный пример</button><button class="button primary" data-open-tab="portfolio" type="button">Перейти к расчёту</button></div></article><article class="panel data-help"><h2>Как подготовить Excel</h2><ol><li>Первый столбец — дата, второй — накопленный ИПЦ.</li><li>Далее — ровно 10 индикаторов, начиная с М2.</li><li>От 13 наблюдений без пропусков; значения положительные.</li><li>Валюты и цены активов заранее переведите в рубли.</li></ol><p id="demo-note" class="data-note">Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите Excel. Цены валют и активов должны быть выражены в рублях.</p></article></div>
+      <article class="panel indicators-panel"><div class="panel-heading"><div><h2>Исходные индикаторы</h2><p>Оценки после поправки на инфляцию; веса текущего портфеля</p></div><span class="pill">10 рядов</span></div><div class="table-scroll"><table id="indicators-table"><caption class="sr-only">Десять индикаторов и их показатели</caption><thead><tr><th>№</th><th>Индикатор</th><th>Ожид. доходность / год</th><th>Волатильность / год</th><th>Вес в портфеле</th></tr></thead><tbody></tbody></table></div></article>
     </section>
+    <footer><span>Портфельная лаборатория · учебный проект</span><span>Все доходности и суммы — в покупательной способности на начало периода.</span></footer>
   </main>
-  <footer class="foot">
-    <div class="wrap foot-inner">
-      <div><p class="foot-brand">portfolio</p><p>Портфельная лаборатория · учебный проект</p><p>Бизнес-аналитика и прогнозирование</p></div>
-      <div><p class="foot-heading">Методика</p><p>Марковиц · Шарп · эффективный риск · эффективная доходность</p><button id="method-button" class="text-button" type="button">Методика расчёта</button></div>
-      <div><p class="foot-heading">Данные и результаты</p><p>Все доходности и суммы — в покупательной способности на начало периода.</p></div>
-    </div>
-  </footer>
   <dialog id="method-dialog"><div class="dialog-heading"><h2>Методика и Excel</h2><button class="button ghost" id="close-method" aria-label="Закрыть методику">Закрыть</button></div><div class="method-content">
     <h3>Данные</h3><p>Первый лист Excel: «Дата», «ИПЦ», затем ровно 10 индикаторов. Каждая строка — уровни на одну дату, а не готовые доходности. ИПЦ — накопленный индекс цен, например 100, 100,5, 101,2; месячный процент инфляции сначала нужно превратить в индекс. Минимум 13 строк наблюдений, желательно 3–5 лет месячных данных. Без пропусков, повторов дат и неположительных значений.</p><p>Валюты, товары и зарубежные индексы заранее переводятся в рубли. Для активов с выплатами предпочтительны индексы полной доходности. Первый ряд Excel предназначен для рублёвой денежной массы М2; при импорте сохраняется название ряда из файла.</p>
     <h3>Поправка на инфляцию</h3><p class="formula">rᵣₑₐₗ,t = (Pₜ / Pₜ₋₁) / (ИПЦₜ / ИПЦₜ₋₁) − 1</p><p>Ожидаемая годовая доходность μ = k × средняя периодическая реальная доходность. Годовая ковариация Σ = k × выборочная ковариация; k = 12, 252 или 1. Волатильность σ = √(wᵀΣw). Годовая инфляция оценивается геометрически по ИПЦ; реальная безрисковая ставка r𝒇 = (1 + номинальная ставка) / (1 + годовая инфляция) − 1.</p>
