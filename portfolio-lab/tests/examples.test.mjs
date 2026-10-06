@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import XLSX from 'xlsx';
 import { parseTable, estimate, createOptimizer, metrics } from '../dist/engine.js';
 
-for (const [profile, expectedShare] of [['m2-90-67', 0.9067], ['m2-60-67', 0.6067]]) {
+for (const [profile, expectedShare] of [['m2-90-67', 0.9067], ['m2-60-67', 0.6067], ['m2-10-00', 0.10]]) {
   test(`${profile}: actual Excel input optimizes to the advertised M2 share`, async () => {
     const workbook = XLSX.read(await readFile(new URL(`../dist/examples/portfolio-${profile}.xlsx`, import.meta.url)), { type: 'buffer' });
     const table = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: null });
@@ -13,6 +13,8 @@ for (const [profile, expectedShare] of [['m2-90-67', 0.9067], ['m2-60-67', 0.606
     assert.equal(data.rows[0].date, '2019-01-31');
     assert.equal(data.rows.at(-1).date, '2026-01-31');
     assert.match(data.names[0], /М2/);
+    assert.equal(data.names[7], 'Индекс недвижимости');
+    assert.ok(!data.names.includes('Нефть Brent'));
     const model = estimate(data, 12, false);
     const parameters = { rf: 1.08 / (1 + model.inflation) - 1, lambda: 3, targetReturn: 0.10, targetRisk: 0.20 };
     const optimizer = createOptimizer(model);
@@ -20,6 +22,12 @@ for (const [profile, expectedShare] of [['m2-90-67', 0.9067], ['m2-60-67', 0.606
     assert.ok(Math.abs(sharpe.weights[0] - expectedShare) < 0.000005, `Actual M2 share ${sharpe.weights[0]} differs from ${expectedShare}`);
     assert.equal((sharpe.weights[0] * 100).toFixed(2), (expectedShare * 100).toFixed(2));
     assert.ok(sharpe.weights.slice(1).every(weight => weight > 0), 'Each of the other nine indicators participates in the example.');
+    if (profile === 'm2-10-00') {
+      assert.ok(Math.abs(sharpe.weights[7] - 0.252) < 0.000005, 'Housing should have a 25.2% weight.');
+      assert.ok(Math.abs(sharpe.weights[1] - 0.18) < 0.000005, 'Gold should have an 18% weight.');
+      assert.ok(sharpe.weights[0] < Math.max(...sharpe.weights.slice(1)), 'M2 must not dominate the diversified example.');
+      assert.ok(Math.max(...sharpe.weights) < 0.30, 'The diversified example must avoid concentration in another single indicator.');
+    }
     const expectedTable = XLSX.utils.sheet_to_json(workbook.Sheets['Ожидаемые веса'], { header: 1 });
     sharpe.weights.forEach((weight, index) => assert.ok(Math.abs(weight - expectedTable[index + 1][1]) < 1e-10));
     const metadata = Object.fromEntries(XLSX.utils.sheet_to_json(workbook.Sheets['Параметры'], { header: 1 }).slice(1));

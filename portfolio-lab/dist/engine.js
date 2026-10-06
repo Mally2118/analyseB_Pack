@@ -7,15 +7,15 @@ export function demoData() {
   let seed=62841;
   const rand=()=>{seed=(1664525*seed+1013904223)>>>0;return (seed+.5)/4294967296;};
   const normal=()=>Math.sqrt(-2*Math.log(rand()))*Math.cos(2*Math.PI*rand());
-  const names=['Рублёвая масса М2','Золото','Доллар США','Евро','Юань','Индекс Мосбиржи','ОФЗ / RGBITR','Нефть Brent','Серебро','Индекс S&P 500'];
-  let values=[58000,3200,64,71,9.2,3000,100,4200,38,190000],cpi=100;
+  const names=['Рублёвая масса М2','Золото','Доллар США','Евро','Юань','Индекс Мосбиржи','ОФЗ / RGBITR','Индекс недвижимости','Серебро','Индекс S&P 500'];
+  let values=[58000,3200,64,71,9.2,3000,100,100,38,190000],cpi=100;
   const rows=[];
   for(let t=0;t<85;t++) {
     const date=new Date(Date.UTC(2019+Math.floor(t/12),t%12+1,0)).toISOString().slice(0,10);
     if(t) {
       const shock=t===38?.15:t===39?-.08:t===50?-.06:0;
       const fx=.018*normal()+shock, equity=.038*normal()-shock*1.3;
-      const rates=[.009+.005*normal(),.011+.5*fx+.031*normal(),.004+fx,.003+.92*fx+.01*normal(),.003+.75*fx+.008*normal(),.012+equity,.007+.009*normal()-shock*.12,.006+.6*fx+.061*normal(),.009+.6*fx+.045*normal(),.012+.6*fx+.034*normal()];
+      const rates=[.009+.005*normal(),.011+.5*fx+.031*normal(),.004+fx,.003+.92*fx+.01*normal(),.003+.75*fx+.008*normal(),.012+equity,.007+.009*normal()-shock*.12,.008+.008*normal()-shock*.08,.009+.6*fx+.045*normal(),.012+.6*fx+.034*normal()];
       values=values.map((v,i)=>v*(1+rates[i]));
       cpi*=1+Math.max(.0003,.004+.0015*normal()+(t===38?.025:0));
     }

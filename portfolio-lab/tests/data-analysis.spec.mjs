@@ -53,16 +53,17 @@ const officialFixture=()=>({
   notes:['М2 — макроэкономический индикатор. Доходности рассчитываются после поправки на ИПЦ.']
 });
 
-test('both downloadable teaching examples load their Sharpe profile and requested M2 weights',async({page},testInfo)=>{
+test('all three downloadable teaching examples load their Sharpe profile, including housing without M2 dominance',async({page},testInfo)=>{
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await start(page);
-  for(const [profile,weight] of [['m2-90-67',90.67],['m2-60-67',60.67]]) {
+  for(const [profile,weight] of [['m2-90-67',90.67],['m2-60-67',60.67],['m2-10-00',10]]) {
     await openTab(page,'data');
     const {file,book}=await downloadWorkbook(page,testInfo,'a[href$="portfolio-'+profile+'.xlsx"]',profile+'.xlsx');
     expect(book.SheetNames).toContain('Параметры');
     const rows=workbookRows(book);
     expect(rows.length).toBeGreaterThan(25);
     expect(rows[0].length).toBe(12);expect(rows[0][2]).toMatch(/М2|M2/);
+    expect(rows[0][9]).toBe('Индекс недвижимости');
     expect(rows.slice(1).every(row=>row.slice(1).every(value=>Number.isFinite(value)&&value>0))).toBeTruthy();
     await page.locator('[data-load-example="'+profile+'"]').click();
     await expect(page.locator('#current-title')).toHaveText('Максимум Шарпа');
@@ -73,6 +74,10 @@ test('both downloadable teaching examples load their Sharpe profile and requeste
     await expect(page.locator('#frequency')).toHaveValue('12');
     const chart=await page.evaluate(()=>echarts.getInstanceByDom(document.getElementById('weights-chart')).getOption().series[0].data);
     expect(chart.find(item=>/М2|M2/.test(item.name)).value).toBeCloseTo(weight,2);
+    if(profile==='m2-10-00') {
+      expect(chart.find(item=>item.name==='Индекс недвижимости').value).toBeCloseTo(25.2,2);
+      expect(Math.max(...chart.map(item=>item.value))).toBeLessThan(30);
+    }
     await page.locator('#mode').selectOption('markowitz');
     await page.locator('#rf').evaluate(element=>{element.closest('details').open=true;});
     await page.locator('#rf').fill('12');
@@ -82,6 +87,13 @@ test('both downloadable teaching examples load their Sharpe profile and requeste
     await expect(page.locator('#current-title')).toHaveText('Максимум Шарпа');
     await expect(page.locator('#indicators-table tbody tr').first()).toContainText(String(weight.toFixed(2)).replace('.',','));
   }
+  await page.screenshot({path:testInfo.outputPath('housing-examples-desktop.png'),fullPage:true});
+  await page.locator('#language-button').click();await page.locator('#theme-button').click();
+  expect(await page.locator('#panel-data').innerText()).not.toMatch(/[А-Яа-яЁё]/);
+  await expect(page.locator('#indicators-table tbody')).toContainText('Real estate index');
+  await page.setViewportSize({width:390,height:844});
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+  await page.screenshot({path:testInfo.outputPath('housing-examples-mobile-dark.png'),fullPage:true});
   expect(errors).toEqual([]);
 });
 

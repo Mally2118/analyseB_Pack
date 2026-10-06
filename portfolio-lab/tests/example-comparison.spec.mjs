@@ -14,12 +14,12 @@ async function expectedExample(profile){
   return {portfolio,stat:metrics(portfolio.snapshot.model,portfolio.weights,portfolio.settings.rf,1000000)};
 }
 
-test('both examples compare their own histories and weights, export their sources and remain correct after common settings change',async({page},testInfo)=>{
+test('all three examples compare their own histories and weights, export their sources and remain correct after common settings change',async({page},testInfo)=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();await tab(page,'comparison');
-  await expect(rows(page)).toHaveCount(3);await expect(page.locator('#comparison-count')).toHaveText('3');
-  const expected=await Promise.all(['m2-90-67','m2-60-67'].map(expectedExample));
-  for(const label of ['90,67','60,67'])await expect(rows(page).filter({hasText:label})).toHaveCount(1);
+  await expect(rows(page)).toHaveCount(4);await expect(page.locator('#comparison-count')).toHaveText('4');
+  const expected=await Promise.all(['m2-90-67','m2-60-67','m2-10-00'].map(expectedExample));
+  for(const label of ['90,67','60,67','10% · недвижимость'])await expect(rows(page).filter({hasText:label})).toHaveCount(1);
   const downloading=page.waitForEvent('download');await page.locator('#export-button').click();
   const download=await downloading,file=testInfo.outputPath('examples.xlsx');await download.saveAs(file);
   const book=XLSX.read(await readFile(file),{type:'buffer'});
@@ -28,9 +28,9 @@ test('both examples compare their own histories and weights, export their source
     const index=capitalRows[0].findIndex(name=>name.includes(portfolio.name));
     expect(capitalRows.slice(1).map(row=>row[index])).toEqual(stat.wealth.map(value=>value*1000000));
   }
-  expect(book.SheetNames).toContain('Пример 1 Данные');expect(book.SheetNames).toContain('Пример 2 Данные');
+  expect(book.SheetNames).toContain('Пример 1 Данные');expect(book.SheetNames).toContain('Пример 2 Данные');expect(book.SheetNames).toContain('Пример 3 Данные');
   await tab(page,'graphs');
-  const comparison=await chart(page);expect(comparison.series).toHaveLength(3);
+  const comparison=await chart(page);expect(comparison.series).toHaveLength(4);
   for(const {portfolio,stat} of expected){
     expect(comparison.series.find(series=>series.name.includes(portfolio.name)).data).toEqual(stat.wealth.map(value=>(value-1)*100));
     const option=page.locator('#report-portfolio option').filter({hasText:portfolio.name});
@@ -54,21 +54,21 @@ test('removal, hiding, empty comparison and restoring examples keep the current 
   await tab(page,'graphs');const exampleId=await page.locator('#report-portfolio option').nth(1).getAttribute('value');
   await page.locator('#report-portfolio').selectOption(exampleId);
   await tab(page,'comparison');await page.locator('[data-toggle="'+exampleId+'"]').uncheck();
-  await expect(rows(page)).toHaveCount(3);await tab(page,'graphs');expect((await chart(page)).series).toHaveLength(2);
+  await expect(rows(page)).toHaveCount(4);await tab(page,'graphs');expect((await chart(page)).series).toHaveLength(3);
   await expect(page.locator('#report-portfolio')).toHaveValue(exampleId);
   await tab(page,'comparison');await page.locator('[data-remove="'+exampleId+'"]').click();
-  await expect(rows(page)).toHaveCount(2);await tab(page,'graphs');await expect(page.locator('#report-portfolio')).toHaveValue('current');
+  await expect(rows(page)).toHaveCount(3);await tab(page,'graphs');await expect(page.locator('#report-portfolio')).toHaveValue('current');
   await tab(page,'comparison');
   while(await page.locator('[data-remove]').count())await page.locator('[data-remove]').first().click();
   await expect(rows(page)).toHaveCount(0);await expect(page.locator('#comparison-count')).toHaveText('0');await expect(page.locator('#export-button')).toBeDisabled();
   await expect(page.locator('#comparison-cards')).toContainText('Сравнение пусто');
   await tab(page,'graphs');expect((await chart(page)).series).toHaveLength(0);
-  await tab(page,'comparison');await page.locator('#compare-examples-button').click();await expect(rows(page)).toHaveCount(2);
-  await page.locator('#compare-examples-button').click();await expect(rows(page)).toHaveCount(2);
+  await tab(page,'comparison');await page.locator('#compare-examples-button').click();await expect(rows(page)).toHaveCount(3);
+  await page.locator('#compare-examples-button').click();await expect(rows(page)).toHaveCount(3);
   await page.locator('#language-button').click();expect(await page.locator('#panel-comparison').innerText()).not.toMatch(/[А-Яа-яЁё]/);
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   await tab(page,'portfolio');expect((await page.locator('#expected-income').textContent()).replace(/\D/g,'')).toBe(original.replace(/\D/g,''));
-  await page.locator('#save-button').click();await tab(page,'comparison');await expect(rows(page)).toHaveCount(3);
+  await page.locator('#save-button').click();await tab(page,'comparison');await expect(rows(page)).toHaveCount(4);
 });
 
 test('example graphs align by date and indicator name after a different workbook is loaded',async({page})=>{
@@ -78,7 +78,7 @@ test('example graphs align by date and indicator name after a different workbook
   XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['Дата','ИПЦ',...names],...source.map(row=>[row.date,row.cpi,...row.values])]),'Данные');
   await tab(page,'data');await page.locator('#file-input').setInputFiles({name:'short.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(XLSX.write(book,{type:'buffer',bookType:'xlsx'}))});
   await expect(page.locator('#message')).not.toHaveClass(/error/);await page.locator('#compare-data-examples-button').click();
-  await expect(rows(page)).toHaveCount(3);await tab(page,'graphs');const option=await chart(page);
+  await expect(rows(page)).toHaveCount(4);await tab(page,'graphs');const option=await chart(page);
   expect(option.xAxis[0].data).toHaveLength(85);expect(option.series.find(series=>!series.name.includes('Учебный')).data.slice(0,12)).toEqual(Array(12).fill(null));
   await page.locator('#report-comparison-view').selectOption('weights');
   const weights=await chart(page);expect(weights.xAxis[0].data).toContain('Свой индикатор');expect(weights.xAxis[0].data).toContain('Золото');
@@ -89,5 +89,5 @@ test('unavailable default examples leave the app working and can be retried with
   await page.route('**/portfolio-m2-60-67.xlsx',route=>route.fulfill({status:404,body:'missing'}));
   await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();await tab(page,'comparison');await expect(rows(page)).toHaveCount(1);
   await page.locator('#compare-examples-button').click();await expect(page.locator('#message')).toHaveClass(/error/);await expect(rows(page)).toHaveCount(1);
-  await page.unroute('**/portfolio-m2-60-67.xlsx');await page.locator('#compare-examples-button').click();await expect(rows(page)).toHaveCount(3);
+  await page.unroute('**/portfolio-m2-60-67.xlsx');await page.locator('#compare-examples-button').click();await expect(rows(page)).toHaveCount(4);
 });

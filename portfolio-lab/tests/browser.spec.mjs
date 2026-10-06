@@ -36,7 +36,7 @@ test('four criteria, saved portfolios, validation and Excel roundtrip work acros
   await page.goto('/');
   await expect(page.locator('#current-title')).toHaveText('Максимум Шарпа');
   await expect(page.locator('#indicators-table tbody tr')).toHaveCount(10);
-  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(3);
+  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);
   await expect(page.locator('#equity-chart svg')).toBeVisible();
   await expect(page.locator('#panel-portfolio')).toBeVisible();
   await expect(page.locator('#message')).toBeHidden();
@@ -51,11 +51,11 @@ test('four criteria, saved portfolios, validation and Excel roundtrip work acros
     await expect(page.locator('#panel-portfolio')).toBeVisible();
   }
   await activateTab(page,'comparison');
-  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(7);
+  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(8);
   await activateTab(page,'graphs');
-  await expect(page.locator('#report-portfolio option')).toHaveCount(7);
+  await expect(page.locator('#report-portfolio option')).toHaveCount(8);
   expect(await chartCounts(page,individualCharts)).toEqual([2,1,1,1,1,1]);
-  expect(await chartCounts(page,['report-comparison-chart'])).toEqual([7]);
+  expect(await chartCounts(page,['report-comparison-chart'])).toEqual([8]);
   await activateTab(page,'portfolio');
   await page.locator('[data-view="drawdown"]').click();
   await expect(page.locator('[data-view="drawdown"]')).toHaveClass('active');
@@ -69,7 +69,7 @@ test('four criteria, saved portfolios, validation and Excel roundtrip work acros
   await expect(page.locator('#first-indicator option')).toHaveCount(1);
   await activateTab(page,'data');
   await expect(page.locator('#indicators-table tbody tr').first()).toContainText('Рублёвая масса М2');
-  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(7);
+  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(8);
   await page.click('#demo-button');
   const downloadPromise=page.waitForEvent('download');await page.click('#template-button');const download=await downloadPromise;
   const file=testInfo.outputPath('template.xlsx');await download.saveAs(file);
@@ -95,14 +95,14 @@ test('mobile tabs, individual report drawings and controls fit the viewport',asy
   await expect(page.locator('#expected-income')).not.toHaveText('—');
   await page.screenshot({path:testInfo.outputPath('mobile.png'),fullPage:true});
   await expectNoOverflow(page);
-  await page.click('#save-button');await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);
+  await page.click('#save-button');await expect(page.locator('#comparison-table tbody tr')).toHaveCount(5);
   for(const tab of ['graphs','data','comparison','backtest','help','portfolio']) {
     await activateTab(page,tab);
     await expectNoOverflow(page);
     if(tab==='graphs') {
       for(const id of reportCharts)await expect(page.locator('#'+id+' svg')).toBeVisible();
       expect(await chartCounts(page,individualCharts)).toEqual([2,1,1,1,1,1]);
-      expect(await chartCounts(page,['report-comparison-chart'])).toEqual([4]);
+      expect(await chartCounts(page,['report-comparison-chart'])).toEqual([5]);
       await page.screenshot({path:testInfo.outputPath('mobile-graphs.png'),fullPage:true});
     }
   }
@@ -125,7 +125,7 @@ test('current charts stay separate, the final report compares portfolios and all
   await page.click('#save-button');
   expect(await chartCounts(page,primaryCharts)).toEqual([2,1,1]);
   await activateTab(page,'graphs');
-  await expect(page.locator('#report-portfolio option')).toHaveCount(4);
+  await expect(page.locator('#report-portfolio option')).toHaveCount(5);
   expect(await chartCounts(page,individualCharts)).toEqual([2,1,1,1,1,1]);
   const report=await chartSeries(page,individualCharts);
   expect(report[0][0].data).toEqual(initial.frontier);
@@ -142,14 +142,14 @@ test('current charts stay separate, the final report compares portfolios and all
   expect(finalPosition).toBeTruthy();
   for(const mode of ['return','wealth','drawdown','recovery','frontier','weights']) {
     await page.selectOption('#report-comparison-view',mode);
-    expect(await chartCounts(page,['report-comparison-chart'])).toEqual([mode==='frontier'?7:4]);
+    expect(await chartCounts(page,['report-comparison-chart'])).toEqual([mode==='frontier'?9:5]);
     expect((await chartSeries(page,individualCharts)).map(series=>series.map(s=>s.data))).toEqual(selectedReport);
   }
   await page.selectOption('#report-comparison-view','return');
   await activateTab(page,'comparison');
   await page.locator('[data-toggle]').first().uncheck();
   await activateTab(page,'graphs');
-  expect(await chartCounts(page,['report-comparison-chart'])).toEqual([3]);
+  expect(await chartCounts(page,['report-comparison-chart'])).toEqual([4]);
   expect((await chartSeries(page,individualCharts)).map(series=>series.map(s=>s.data))).toEqual(selectedReport);
   await activateTab(page,'portfolio');
   expect(await chartCounts(page,primaryCharts)).toEqual([2,1,1]);
@@ -249,7 +249,7 @@ test('language and theme switching preserve tab, report selection, portfolio dat
   await expect(page.locator('#calculate-button')).toHaveText('Calculate portfolio');
   await expect(page.locator('#current-title')).toHaveText('Markowitz');
   await expect(page.locator('#message')).toContainText('Portfolio “Markowitz');
-  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);
+  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(5);
   await expect(page.locator('[data-toggle]').first()).not.toBeChecked();
   await expect(page.locator('[data-view="drawdown"]')).toHaveClass('active');
   await expect(page.locator('#lambda')).toHaveValue('4');

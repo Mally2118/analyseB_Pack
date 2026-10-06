@@ -3,7 +3,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import XLSX from 'xlsx';
-import { parseTable, estimate, createOptimizer, metrics } from './dist/engine.js';
+import { demoData, parseTable, estimate, createOptimizer, metrics } from './dist/engine.js';
+import { exampleDefinitions } from './dist/example-portfolios.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const observationCount = 85;
@@ -11,15 +12,18 @@ const periods = observationCount - 1;
 const annualInflation = 0.05;
 const nominalRate = 0.08;
 const realRate = (1 + nominalRate) / (1 + annualInflation) - 1;
-const standardDeviations = [0.06, 0.20, 0.15, 0.16, 0.13, 0.22, 0.10, 0.30, 0.26, 0.24];
+const standardDeviations = [0.06, 0.20, 0.15, 0.16, 0.13, 0.22, 0.10, 0.12, 0.26, 0.24];
 const otherProportions = [0.16, 0.12, 0.08, 0.08, 0.13, 0.10, 0.10, 0.10, 0.13];
-const names = ['Рублёвая масса М2', 'Золото', 'Доллар США', 'Евро', 'Юань', 'Индекс Мосбиржи', 'ОФЗ / RGBITR', 'Нефть Brent', 'Серебро', 'Индекс S&P 500'];
+const diversifiedProportions = [0.20, 0.08, 0.04, 0.04, 0.10, 0.14, 0.28, 0.06, 0.06];
+const demo = demoData();
+const names = demo.names;
 const modes = ['sharpe', 'markowitz', 'risk', 'return'];
 const modeLabels = ['Максимум Шарпа', 'Марковиц, λ = 3', 'Эффективный риск, доходность ≥ 10%', 'Эффективная доходность, риск ≤ 20%'];
 const rounded = number => Math.round(number * 1e9) / 1e9;
 
 function createTable(m2Share) {
-  const intendedWeights = [m2Share, ...otherProportions.map(proportion => (1 - m2Share) * proportion)];
+  const proportions = m2Share === 0.10 ? diversifiedProportions : otherProportions;
+  const intendedWeights = [m2Share, ...proportions.map(proportion => (1 - m2Share) * proportion)];
   // Orthogonal monthly sine waves have zero sample cross-covariance. For a
   // diagonal covariance matrix, the maximum-Sharpe solution is proportional to
   // (mean - real risk-free rate) / variance. These means therefore produce the
@@ -28,7 +32,7 @@ function createTable(m2Share) {
   const means = standardDeviations.map((deviation, index) => realRate + 35 * deviation ** 2 * intendedWeights[index]);
   const monthlyInflationFactor = (1 + annualInflation) ** (1 / 12);
   const waveScale = Math.sqrt(2 * (periods - 1) / (periods * 12));
-  let values = [58000, 3200, 64, 71, 9.2, 3000, 100, 4200, 38, 190000];
+  let values = [...demo.rows[0].values];
   let cpi = 100;
   const table = [['Дата', 'ИПЦ', ...names]];
   for (let period = 0; period < observationCount; period++) {
@@ -136,7 +140,7 @@ function makeWorkbook(m2Share) {
     ['Юань', '₽ за CNY, условный курс', 'Синтетический генератор'],
     ['Индекс Мосбиржи', 'Условная рублёвая стоимость индексной корзины', 'Синтетический генератор'],
     ['ОФЗ / RGBITR', 'Условная рублёвая стоимость облигационной корзины', 'Синтетический генератор'],
-    ['Нефть Brent', '₽ за баррель, условный уровень', 'Синтетический генератор'],
+    ['Индекс недвижимости', 'Индекс рублёвых цен на жильё, январь 2019 = 100; без арендного дохода', 'Синтетический генератор'],
     ['Серебро', '₽ за грамм, условный уровень', 'Синтетический генератор'],
     ['Индекс S&P 500', 'Условная рублёвая стоимость индексной корзины', 'Синтетический генератор'],
     ['ИПЦ', 'Накопленный индекс, январь 2019 = 100', 'Синтетические 5% годовых'],
@@ -166,7 +170,7 @@ function makeWorkbook(m2Share) {
 }
 
 await mkdir(join(directory, 'dist', 'examples'), { recursive: true });
-for (const m2Share of [0.9067, 0.6067]) {
+for (const {m2Share} of exampleDefinitions) {
   const { workbook, profile, table } = makeWorkbook(m2Share);
   const filename = join(directory, 'dist', 'examples', `portfolio-${profile}.xlsx`);
   await writeFile(filename, XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer', compression: true }));

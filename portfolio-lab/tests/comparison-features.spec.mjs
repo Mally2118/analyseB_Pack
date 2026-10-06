@@ -14,8 +14,8 @@ async function openLibrary(page){await page.locator('.comparison-library').evalu
 async function table(page){return page.locator('#comparison-table tbody').innerText();}
 
 test('differences follow the selected baseline, rank direction, and stay accessible with highlight disabled and translated',async({page})=>{
-  await start(page);await expect(rows(page)).toHaveCount(3);
-  await expect(rows(page).filter({has:page.locator('[data-metric="expectedIncome"].metric-best')})).toContainText('90,67');
+  await start(page);await expect(rows(page)).toHaveCount(4);
+  await expect(rows(page).filter({has:page.locator('[data-metric="expectedIncome"].metric-best')})).toContainText('10% · недвижимость');
   await expect(page.locator('[data-baseline="true"]')).toContainText('текущий');
   await expect(page.locator('[data-baseline="true"] .metric-difference')).toHaveCount(0);
   const baseline=await rows(page).filter({hasText:'60,67'}).getAttribute('data-portfolio-id');
@@ -42,7 +42,7 @@ test('a common period recalculates the table and exported charts, rebases capita
   await tab(page,'comparison');const downloading=page.waitForEvent('download');await page.locator('#export-button').click();const download=await downloading;
   const file=testInfo.outputPath('common-period.xlsx');await download.saveAs(file);const workbook=XLSX.read(await readFile(file),{type:'buffer'});
   const capital=XLSX.utils.sheet_to_json(workbook.Sheets['Реальный капитал'],{header:1});expect(capital).toHaveLength(50);
-  expect(capital[1].slice(1)).toEqual([1e6,1e6,1e6]);
+  expect(capital[1].slice(1)).toEqual([1e6,1e6,1e6,1e6]);
   const before=await table(page);await page.locator('#comparison-from').fill('2025-07-31');await page.locator('#comparison-to').fill('2026-01-31');await page.locator('#comparison-period-apply').click();
   await expect(page.locator('#message')).toHaveClass(/error/);await expect(page.locator('#message')).toContainText('13');expect(await table(page)).toBe(before);
   await page.locator('#comparison-period-reset').click();expect(await table(page)).toBe(original);
@@ -60,12 +60,12 @@ test('named sets survive reload, restore removed current, hidden examples, commo
   const before=await table(page);await openLibrary(page);await page.locator('#comparison-set-name').fill('Мой набор <test>');await page.locator('#comparison-set-save').click();
   await expect(page.locator('#message')).not.toHaveClass(/error/);await expect(page.locator('#comparison-set-select option')).toHaveCount(2);
   await page.locator('#comparison-set-save').click();await expect(page.locator('#comparison-set-select option')).toHaveCount(2);
-  const setId=await page.locator('#comparison-set-select').inputValue();await page.reload();await expect(rows(page)).toHaveCount(3);await tab(page,'comparison');
-  await expect(rows(page)).toHaveCount(3);await openLibrary(page);await page.locator('#comparison-set-select').selectOption(setId);await page.locator('#comparison-set-open').click();
-  await expect(page.locator('#message')).not.toHaveClass(/error/);await expect(rows(page)).toHaveCount(2);expect(await table(page)).toBe(before);
+  const setId=await page.locator('#comparison-set-select').inputValue();await page.reload();await expect(rows(page)).toHaveCount(4);await tab(page,'comparison');
+  await expect(rows(page)).toHaveCount(4);await openLibrary(page);await page.locator('#comparison-set-select').selectOption(setId);await page.locator('#comparison-set-open').click();
+  await expect(page.locator('#message')).not.toHaveClass(/error/);await expect(rows(page)).toHaveCount(3);expect(await table(page)).toBe(before);
   await expect(page.locator('#comparison-baseline')).toHaveValue(exampleId);await expect(page.locator('[data-toggle="'+exampleId+'"]')).not.toBeChecked();
   await expect(page.locator('#comparison-from')).toHaveValue('2020-01-31');await expect(page.locator('#comparison-to')).toHaveValue('2024-01-31');
-  await tab(page,'graphs');expect((await chart(page)).series).toHaveLength(1);expect((await chart(page)).xAxis[0].data).toHaveLength(49);
+  await tab(page,'graphs');expect((await chart(page)).series).toHaveLength(2);expect((await chart(page)).xAxis[0].data).toHaveLength(49);
   await tab(page,'comparison');await page.locator('#comparison-set-delete').click();await expect(page.locator('#comparison-set-select option')).toHaveCount(1);expect(await table(page)).toBe(before);
 });
 

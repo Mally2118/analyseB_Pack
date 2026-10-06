@@ -3,7 +3,7 @@ import {t,locale,language,theme,setLanguage,setTheme,captureStaticTranslations,t
 import {renderReport,resizeReport,getReportChart} from './report-charts.js';
 import {createBacktestView} from './backtest-ui.js';
 import {createDataImportView} from './data-import-ui.js';
-import {loadExamplePortfolios} from './example-portfolios.js';
+import {exampleProfiles,loadExamplePortfolios} from './example-portfolios.js';
 import {comparisonMetrics,evaluatePortfolio,comparisonStat as calculateComparisonStat,reportPortfolio,metricComparison} from './comparison.js';
 import {createComparisonControls} from './comparison-controls.js';
 const $=id=>document.getElementById(id);
@@ -204,7 +204,7 @@ async function upload(file) {
   const next=parseTable(XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,defval:null,raw:true}));
   const parameters=book.Sheets['Параметры']?XLSX.utils.sheet_to_json(book.Sheets['Параметры'],{header:1}):[];
   const declaredProfile=parameters.find(row=>row[0]==='Профиль')?.[1];
-  const profile=['m2-90-67','m2-60-67'].includes(declaredProfile)?declaredProfile:null;
+  const profile=exampleProfiles.includes(declaredProfile)?declaredProfile:null;
   applyDataset({...next,source:profile?'Учебный пример · синтетические данные':file.name,demo:!!profile},{profile});
   if(profile)message('Учебный пример загружен. Максимум Шарпа, ставка 8%, месячные данные. Доля М2: {weight}.',false,{weight:percent(current.weights[0])});
   else message('Excel загружен: {count} наблюдений, 10 индикаторов. Сравнение очищено; начальный расчёт выполнен по Марковицу с λ = 3.',false,{count:next.rows.length});
@@ -299,7 +299,7 @@ async function addExamplesToComparison() {
     for(const example of missing)saved.push({...example,id:'p'+(++sequence),color:colors.slice(1).find(color=>!saved.some(p=>p.color===color)),weights:[...example.weights]});
     saved.filter(p=>p.profile).forEach(p=>p.visible=true);
     renderComparison();syncReportSelector();renderCharts();
-    message('Два учебных портфеля готовы к сравнению. Каждый использует свои синтетические данные и ставку 8%.');
+    message('Три учебных портфеля готовы к сравнению. Каждый использует свои синтетические данные и ставку 8%.');
   } finally {buttons.forEach(button=>button.disabled=false);}
 }
 function syncReportSelector() {

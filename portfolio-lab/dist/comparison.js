@@ -1,4 +1,5 @@
 import {parseTable,estimate,createOptimizer,metrics} from './engine.js';
+import {exampleProfiles} from './example-portfolios.js';
 
 export const comparisonMetrics=[
   ['expectedIncome',1,'money'],['expectedReturn',1,'percent'],['risk',-1,'percent'],['sharpe',1,'number'],
@@ -79,7 +80,7 @@ export function restoreComparison(payload) {
   function unpack(portfolio){
     if(!portfolio||!/^current$|^p\d+$/.test(portfolio.id)||ids.has(portfolio.id)||!['markowitz','sharpe','risk','return'].includes(portfolio.mode)||!Array.isArray(portfolio.weights)||portfolio.weights.length!==10||portfolio.weights.some(w=>!Number.isFinite(w)||w<0)||Math.abs(portfolio.weights.reduce((a,b)=>a+b,0)-1)>1e-7||!Number.isInteger(portfolio.source)||!sources[portfolio.source]||![1,12,252].includes(portfolio.frequency)||typeof portfolio.cash!=='boolean'||typeof portfolio.name!=='string'||portfolio.name.length>160)invalid();
     if(!portfolio.settings||Object.values(portfolio.settings).some(value=>!Number.isFinite(value))||!Number.isFinite(portfolio.settings.nominalRf)||portfolio.settings.nominalRf<=-1)invalid();
-    if(portfolio.profile&&!['m2-90-67','m2-60-67'].includes(portfolio.profile))invalid();
+    if(portfolio.profile&&!exampleProfiles.includes(portfolio.profile))invalid();
     if(portfolio.ordinal!==undefined&&(!Number.isInteger(portfolio.ordinal)||portfolio.ordinal<1))invalid();
     ids.add(portfolio.id);
     const key=`${portfolio.source}:${portfolio.frequency}:${portfolio.cash}`;
