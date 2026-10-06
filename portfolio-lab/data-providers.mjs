@@ -1,4 +1,5 @@
 import XLSX from './server-xlsx.mjs';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const CBR = 'https://www.cbr.ru';
 const ROSSTAT = 'https://www.rosstat.gov.ru';
@@ -179,23 +180,51 @@ function cached(cache, key, limit, task) {
   return entry.promise;
 }
 
+function retryable(error) {
+  const codes = new Set(['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ECONNREFUSED', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT']);
+  const pending = [error], seen = new Set();
+  let transient = false;
+  while (pending.length && seen.size < 12) {
+    const item = pending.shift();
+    if (!item || typeof item !== 'object' || seen.has(item)) continue;
+    seen.add(item);
+    if (/CERT|SSL|TLS|SELF_SIGNED/.test(String(item.code ?? ''))) return false;
+    if (codes.has(item.code) || [429, 502, 503, 504].includes(item.httpStatus)) transient = true;
+    pending.push(item.cause, ...(Array.isArray(item.errors) ? item.errors.slice(0, 4) : []));
+  }
+  return transient;
+}
+
 async function download(url, label, fetchImpl = fetch) {
+  const signal = AbortSignal.timeout(20000);
   try {
-    const response = await fetchImpl(url, { signal: AbortSignal.timeout(20000), headers: { Accept: '*/*' } });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    if (Number(response.headers.get('content-length')) > MAX_BYTES) throw new Error('слишком большой ответ');
-    const reader = response.body.getReader(), chunks = [];
-    let size = 0;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > MAX_BYTES) { await reader.cancel(); throw new Error('слишком большой ответ'); }
-      chunks.push(Buffer.from(value));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let reader;
+      try {
+        const response = await fetchImpl(url, { signal, headers: { Accept: '*/*' } });
+        if (!response.ok || Number(response.headers.get('content-length')) > MAX_BYTES) {
+          await response.body?.cancel();
+          throw Object.assign(new Error(response.ok ? 'слишком большой ответ' : `HTTP ${response.status}`), { httpStatus: response.status });
+        }
+        reader = response.body.getReader();
+        const chunks = [];
+        let size = 0;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          size += value.length;
+          if (size > MAX_BYTES) throw new Error('слишком большой ответ');
+          chunks.push(Buffer.from(value));
+        }
+        return Buffer.concat(chunks);
+      } catch (error) {
+        await reader?.cancel().catch(() => {});
+        if (attempt === 2 || signal.aborted || !retryable(error)) throw error;
+        await delay(attempt === 0 ? 250 : 750, undefined, { signal });
+      }
     }
-    return Buffer.concat(chunks);
   } catch (error) {
-    throw new ProviderError(`${label} недоступен (${error.name === 'TimeoutError' ? 'истекло время ожидания' : error.message}). Попробуйте позже или загрузите Excel.`, { code: 'SOURCE_UNAVAILABLE', cause: error });
+    throw new ProviderError(`${label} недоступен (${signal.aborted ? 'истекло время ожидания' : error.message}). Попробуйте позже или загрузите Excel.`, { code: 'SOURCE_UNAVAILABLE', cause: error });
   }
 }
 

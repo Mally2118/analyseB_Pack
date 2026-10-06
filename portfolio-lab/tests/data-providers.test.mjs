@@ -153,6 +153,77 @@ test('upstream failure is explicit, and invalid periods make no network requests
   assert.equal(clean.requested.length, 0);
 });
 
+test('transient network failures recover after two retries using one shared request deadline', async () => {
+  const { fake } = fixtureFetch();
+  let attempts = 0;
+  const signals = [];
+  const fetchImpl = async (url, options) => {
+    if (url.includes('/IMOEX/')) {
+      attempts++;
+      signals.push(options.signal);
+      if (attempts < 3) throw new TypeError('fetch failed', { cause: Object.assign(new Error('Connection reset'), { code: 'ECONNRESET' }) });
+    }
+    return fake(url);
+  };
+  const data = await loadMarketData('2024-01', '2025-01', { fetchImpl, now, useCache: false });
+  assert.equal(attempts, 3);
+  assert.equal(data.rows.length, 13);
+  assert.equal(new Set(signals).size, 1);
+  assert.ok(signals[0] instanceof AbortSignal);
+});
+
+test('temporary HTTP rate limits and unavailable source responses are retried', async () => {
+  const { fake } = fixtureFetch();
+  let attempts = 0;
+  const fetchImpl = async url => {
+    if (url.includes('/IMOEX/')) {
+      attempts++;
+      if (attempts < 3) return new Response('Temporarily unavailable', { status: attempts === 1 ? 429 : 503 });
+    }
+    return fake(url);
+  };
+  assert.equal((await loadMarketData('2024-01', '2025-01', { fetchImpl, now, useCache: false })).rows.length, 13);
+  assert.equal(attempts, 3);
+});
+
+test('certificate verification failures are fatal and never retried', async () => {
+  const { fake } = fixtureFetch();
+  let attempts = 0;
+  const original = new TypeError('fetch failed', { cause: Object.assign(new Error('Unable to verify certificate'), { code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' }) });
+  const fetchImpl = async url => {
+    if (url.includes('/IMOEX/')) { attempts++; throw original; }
+    return fake(url);
+  };
+  await assert.rejects(loadMarketData('2024-01', '2025-01', { fetchImpl, now, useCache: false }), error => error.code === 'SOURCE_UNAVAILABLE' && error.cause === original);
+  assert.equal(attempts, 1);
+});
+
+test('exhausted transient retries preserve the final network cause and stop after three attempts', async () => {
+  const { fake } = fixtureFetch();
+  let attempts = 0, latest;
+  const fetchImpl = async url => {
+    if (url.includes('/IMOEX/')) {
+      attempts++;
+      latest = new TypeError('fetch failed', { cause: Object.assign(new Error(`Connection reset ${attempts}`), { code: 'ECONNRESET' }) });
+      throw latest;
+    }
+    return fake(url);
+  };
+  await assert.rejects(loadMarketData('2024-01', '2025-01', { fetchImpl, now, useCache: false }), error => error.code === 'SOURCE_UNAVAILABLE' && error.cause === latest && error.cause.cause.code === 'ECONNRESET');
+  assert.equal(attempts, 3);
+});
+
+test('malformed source payloads are rejected without network retries', async () => {
+  const { fake } = fixtureFetch();
+  let attempts = 0;
+  const fetchImpl = async url => {
+    if (url.includes('/IMOEX/')) { attempts++; return new Response(JSON.stringify({ invalid: true })); }
+    return fake(url);
+  };
+  await assert.rejects(loadMarketData('2024-01', '2025-01', { fetchImpl, now, useCache: false }), error => error.code === 'INVALID_SOURCE_DATA');
+  assert.equal(attempts, 1);
+});
+
 test('server exposes validation errors as JSON and keeps the static download route', async t => {
   const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('..', import.meta.url), env: {...process.env, PORT:'0'}, stdio:['ignore','pipe','pipe'] });
   t.after(() => child.kill());

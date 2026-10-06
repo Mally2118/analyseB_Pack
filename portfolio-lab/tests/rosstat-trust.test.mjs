@@ -14,7 +14,7 @@ async function outputFor(t) {
   t.after(async () => {
     assert.equal(dirname(resolve(folder)), resolve(tmpdir()));
     assert.ok(basename(folder).startsWith('portfolio-ca-'));
-    await rm(folder, { recursive: true, force: true });
+    await rm(folder, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
   return { folder, output: join(folder, 'rosstat-ca.pem') };
 }
