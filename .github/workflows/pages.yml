@@ -49,6 +49,11 @@ jobs:
         id: refresh
         run: node portfolio-lab/update-market-data.mjs --fallback portfolio-lab/artifacts/market-data-cache.json ${{ github.event.inputs.diagnostics == 'true' && '--diagnose-runner' || '' }}
 
+      - name: Inspect public Rosstat certificate
+        if: github.event.inputs.diagnostics == 'true'
+        run: |
+          timeout 20 openssl s_client -connect www.rosstat.gov.ru:443 -servername www.rosstat.gov.ru -showcerts </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -dates -fingerprint -sha256
+
       - name: Prepare successful statistics for cache
         if: steps.refresh.outputs.updated == 'true'
         run: |
