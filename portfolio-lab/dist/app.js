@@ -1,10 +1,10 @@
-import {demoData,parseTable,estimate,createOptimizer,metrics} from './engine.js';
+import {estimate,createOptimizer,metrics} from './engine.js';
 import {t,locale,language,theme,setLanguage,setTheme,captureStaticTranslations,translateStatic,translateError} from './i18n.js';
 import {renderReport,resizeReport,getReportChart} from './report-charts.js';
 import {createBacktestView} from './backtest-ui.js';
 import {createDataImportView} from './data-import-ui.js';
-import {exampleProfiles,loadExamplePortfolios} from './example-portfolios.js';
-import {comparisonMetrics,evaluatePortfolio,comparisonStat as calculateComparisonStat,reportPortfolio,metricComparison} from './comparison.js';
+import {macroSeries} from './macro.js';
+import {comparisonMetrics,evaluatePortfolio,comparisonStat as calculateComparisonStat,reportPortfolio,metricComparison,discardGeneratedComparisonSets} from './comparison.js';
 import {createComparisonControls} from './comparison-controls.js';
 const $=id=>document.getElementById(id);
 const percent=v=>Number.isFinite(v)?new Intl.NumberFormat(locale(),{style:'percent',minimumFractionDigits:2,maximumFractionDigits:2}).format(v):'—';
@@ -19,11 +19,11 @@ const darkColors=['#ff6a3d','#d0c5b4','#92b4df','#d8bd74','#bfa2d0','#8fc8c0','#
 let colors=theme==='dark'?darkColors:lightColors;
 const modes={markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность'};
 const descriptions={markowitz:'Максимум доходности с штрафом за риск. Чем выше λ, тем осторожнее портфель.',sharpe:'Максимум избыточной реальной доходности на единицу риска.',risk:'Минимальный риск при доходности не ниже заданного уровня.',return:'Максимальная доходность при риске не выше заданного лимита.'};
-let data=demoData(),model,optimizer,current,saved=[],sequence=0,view='return',capital=1000000,rf=0,signature='',weightsColumns=0;
+let data=null,model,optimizer,current,saved=[],sequence=0,view='return',capital=1000000,rf=0,signature='',weightsColumns=0;
 let activeTab='portfolio',selectedReportId='current',reportView='return';
 const charts={};
 let lastMessage;
-let backtestView,importView,examples,comparisonControls;
+let backtestView,importView,comparisonControls;
 let comparisonPeriod=null,baselineId='current',highlightComparison=true;
 function message(text,error=false,values={}){lastMessage={text,error,values};const portfolio=values.portfolioId&&saved.find(p=>p.id===values.portfolioId),details={...values,...portfolio?{name:portfolioName(portfolio)}:{},...values.criterionMode?{criterion:t(modes[values.criterionMode]),reason:translateError(values.reason)}:{}};$('message').textContent=error&&!values.criterionMode?translateError(text):t(text,details);$('message').classList.toggle('error',error);$('message').hidden=false;}
 function modeFields(){
@@ -33,13 +33,14 @@ function modeFields(){
   }
 }
 function numeric(id){const value=$(id).value.trim();if(!value||!Number.isFinite(Number(value)))throw Error('Заполните числовой параметр: '+parameterLabels.get(id));return Number(value);}
-function calculate({quiet=false,initial=false}={}) {
+function calculate({quiet=false}={}) {
+  if(!data)throw Error('Сначала загрузите официальную статистику.');
   const newCapital=numeric('capital'),nominalRf=numeric('rf')/100;
   if(newCapital<=0||newCapital>1e15)throw Error('Начальный капитал должен быть больше нуля и не превышать 10¹⁵ ₽.');
   if(nominalRf<=-1)throw Error('Безрисковая ставка должна быть выше −100%.');
-  const frequency=Number($('frequency').value),cash=$('first-indicator').value==='cash';
-  const newSignature=`${frequency}:${cash}`;
-  const nextModel=newSignature!==signature||!model?estimate(data,frequency,cash):model;
+  const frequency=12;
+  const newSignature=`${frequency}`;
+  const nextModel=newSignature!==signature||!model?estimate(data,frequency):model;
   const nextOptimizer=nextModel===model?optimizer:createOptimizer(nextModel);
   const nextRf=(1+nominalRf)/(1+nextModel.inflation)-1;
   const mode=$('mode').value;
@@ -50,15 +51,12 @@ function calculate({quiet=false,initial=false}={}) {
   model=nextModel;optimizer=nextOptimizer;capital=newCapital;rf=nextRf;signature=newSignature;
   if(cleared){saved=[];comparisonPeriod=null;}
   current={...solution,compared:true,id:'current',name:modes[mode],color:colors[0],mode,settings:{...settings,nominalRf},visible:true};
-  if(initial) {
-    saved=(examples||[]).map((p,i)=>({...p,id:'p'+(++sequence),color:colors[i+1],weights:[...p.weights]}));
-  }
   render();
   if(!quiet)message(cleared?'Портфель рассчитан. При смене периодичности или первого индикатора сравнение очищено.':'Портфель рассчитан. Добавьте результат к сравнению, затем выберите другой критерий.');
   return {name:portfolioName(current),weights:[...current.weights],expectedReturn:current.return,risk:current.risk};
 }
 function allPortfolios(){return [current,...saved];}
-function comparisonPortfolios(){return allPortfolios().filter(p=>p.compared!==false);}
+function comparisonPortfolios(){return current?allPortfolios().filter(p=>p.compared!==false):[];}
 function stat(p){return metrics(p.snapshot?.model||model,p.weights,p.snapshot?p.settings.rf:rf,capital);}
 function comparisonContext(){return {data,model,capital,rf,nominalRf:current.settings.nominalRf};}
 function comparisonStat(p){return calculateComparisonStat(p,comparisonContext(),comparisonPeriod);}
@@ -71,16 +69,21 @@ function restoreComparisonState(state){
   ({data,model,current,saved,sequence,capital,rf,signature,baselineId,selectedReportId,reportView}=state);
   optimizer=state.optimizer;comparisonPeriod=state.period;highlightComparison=state.highlight;
   allPortfolios().forEach((p,i)=>p.color=colors[i]);
-  for(const [id,value] of Object.entries({mode:current.mode,capital,rf:current.settings.nominalRf*100,frequency:model.frequency,'first-indicator':signature.endsWith(':true')?'cash':'m2',lambda:current.settings.lambda??3,'target-return':(current.settings.targetReturn??.1)*100,'target-risk':(current.settings.targetRisk??.2)*100}))$(id).value=String(value);
+  for(const [id,value] of Object.entries({mode:current.mode,capital,rf:current.settings.nominalRf*100,frequency:model.frequency,lambda:current.settings.lambda??3,'target-return':(current.settings.targetReturn??.1)*100,'target-risk':(current.settings.targetRisk??.2)*100}))$(id).value=String(value);
   $('report-comparison-view').value=reportView;modeFields();render();
 }
 function render() {
+  if(!current)return;
+  setReady(true);
   const s=stat(current);
-  $('data-badge').textContent=data.demo?t('Учебные данные'):data.official?t('Официальные данные'):t('Ваш Excel');
-  $('data-status').textContent=$('data-badge').textContent;
-  $('upload-status').textContent=data.demo?t('Перетащите Excel сюда'):data.official?t(data.source):data.source;
+  $('data-badge').textContent=t('Официальные данные');
+  $('data-status').textContent=t('Официальные данные');
   $('data-info').textContent=`${data.rows[0].date} — ${data.rows.at(-1).date} · ${data.rows.length} ${t('наблюдений')} · ${t('инфляция')} ${percent(model.inflation)} ${t('/ год')}`;
-  $('demo-note').textContent=data.demo?t('Синтетические ряды для демонстрации расчётов. Для работы с историческими данными загрузите официальную статистику выше или свой Excel. Цены валют и активов должны быть выражены в рублях.'):data.official?t('Официальные месячные ряды ЦБ, Росстата и Мосбиржи. Доходности скорректированы на накопленный ИПЦ; подробности источников указаны выше.'):t('Источник: ')+data.source+t('. Все ряды скорректированы на ИПЦ из файла; экономическое содержание и рублёвые единицы проверьте по своим источникам.');
+  const macro=macroSeries(data);
+  $('inflation-total').textContent=percent(macro.accumulatedInflation.at(-1));
+  $('inflation-annual').textContent=percent(model.inflation);
+  $('m2-growth').textContent=percent(macro.moneyGrowth.at(-1));
+  $('m2-level').textContent=number(macro.moneySupply.at(-1))+' '+t('млрд ₽');
   $('current-title').textContent=portfolioName(current);
   $('expected-income').textContent=money(s.expectedIncome);
   $('expected-rate').textContent=percent(s.expectedReturn)+t(' реальной доходности / год');
@@ -104,8 +107,7 @@ function renderComparison() {
   const ps=comparisonPortfolios();
   $('comparison-count').textContent=String(ps.length);
   $('export-button').disabled=!ps.length;
-  $('comparison-examples-note').hidden=!saved.some(p=>p.snapshot);
-  $('comparison-cards').innerHTML=ps.length?[...saved,...(current.compared!==false?[current]:[])].map(p=>`<div class="${p.id==='current'?'portfolio-chip current-portfolio-chip':'portfolio-chip'}"><input type="checkbox" ${p.visible?'checked':''} data-toggle="${p.id}" aria-label="${escape(t('Показать {name} на графиках',{name:portfolioName(p)}))}"><span class="swatch" style="background:${p.color}"></span><span>${escape(portfolioName(p))}${p.id==='current'?t(' · текущий'):''}</span><button type="button" data-remove="${p.id}" aria-label="${escape(t('Удалить {name}',{name:portfolioName(p)}))}" title="${escape(t('Убрать из сравнения'))}">×</button></div>`).join(''):`<p class="empty-note">${escape(t('Сравнение пусто. Добавьте учебные примеры или рассчитайте и добавьте свой портфель.'))}</p>`;
+  $('comparison-cards').innerHTML=ps.length?[...saved,...(current.compared!==false?[current]:[])].map(p=>`<div class="${p.id==='current'?'portfolio-chip current-portfolio-chip':'portfolio-chip'}"><input type="checkbox" ${p.visible?'checked':''} data-toggle="${p.id}" aria-label="${escape(t('Показать {name} на графиках',{name:portfolioName(p)}))}"><span class="swatch" style="background:${p.color}"></span><span>${escape(portfolioName(p))}${p.id==='current'?t(' · текущий'):''}</span><button type="button" data-remove="${p.id}" aria-label="${escape(t('Удалить {name}',{name:portfolioName(p)}))}" title="${escape(t('Убрать из сравнения'))}">×</button></div>`).join(''):`<p class="empty-note">${escape(t('Сравнение пусто. Рассчитайте и добавьте портфель по официальным данным.'))}</p>`;
   if(comparisonPeriod){try{ps.forEach(comparisonStat);}catch{comparisonPeriod=null;message('Общий период сброшен: изменился состав или данные портфелей.');}}
   if(!ps.some(p=>p.id===baselineId))baselineId=ps[0]?.id||'current';
   comparisonControls?.render(ps,comparisonContext(),comparisonPeriod,baselineId,highlightComparison);
@@ -126,7 +128,7 @@ function renderComparison() {
   }
   $('comparison-table').querySelector('tbody').innerHTML=ps.map((p,i)=>{
     const sourceModel=evaluatePortfolio(p,comparisonContext(),comparisonPeriod).model;
-    return `<tr data-portfolio-id="${p.id}" data-baseline="${p.id===baselineId}"><td><span class="asset-name"><span class="swatch" style="background:${p.color}"></span>${escape(portfolioName(p))}${p.id==='current'?t(' · текущий'):''}</span><small class="comparison-source">${escape(t(p.snapshot?.data.demo||!p.snapshot&&data.demo?'Учебные данные':p.snapshot?.data.official||!p.snapshot&&data.official?'Официальные данные':'Ваш Excel'))} · ${sourceModel.dates[0]} — ${sourceModel.dates.at(-1)}</small></td>${comparisonMetrics.map((_,j)=>metricCell(stats[i],i,j)).join('')}</tr>`;
+    return `<tr data-portfolio-id="${p.id}" data-baseline="${p.id===baselineId}"><td><span class="asset-name"><span class="swatch" style="background:${p.color}"></span>${escape(portfolioName(p))}${p.id==='current'?t(' · текущий'):''}</span><small class="comparison-source">${escape(t('Официальные данные'))} · ${sourceModel.dates[0]} — ${sourceModel.dates.at(-1)}</small></td>${comparisonMetrics.map((_,j)=>metricCell(stats[i],i,j)).join('')}</tr>`;
   }).join('');
 }
 const chartLabels={'frontier-chart':'Эффективная граница и текущий портфель','equity-chart':'Кривая текущего портфеля','weights-chart':'Интерактивная круговая диаграмма весов текущего портфеля'};
@@ -135,7 +137,8 @@ function chart(id){return charts[id]??(charts[id]=echarts.init($(id),null,{rende
 function tooltipRows(items,value){return items.map(p=>`<div style="margin:5px 0"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${p.color};margin-right:7px"></span>${escape(p.seriesName)} <b>${escape(value(p))}</b></div>`).join('');}
 function renderCharts() {
   if(activeTab==='backtest'){backtestView?.render();return;}
-  if(activeTab==='graphs'){renderReportFigures();return;}
+  if(!current)return;
+  if(activeTab==='graphs'){renderReportFigures();renderMacroCharts();return;}
   if(activeTab!=='portfolio')return;
   const portfolios=[current],frontier=optimizer.frontier;
   const css=getComputedStyle(document.documentElement),chartLine=css.getPropertyValue('--chart-line').trim(),accent=css.getPropertyValue('--accent').trim(),accentSoft=css.getPropertyValue('--accent-soft').trim();
@@ -143,6 +146,15 @@ function renderCharts() {
   renderWeights();
   const useMoney=view==='wealth';
   chart('equity-chart').setOption({...baseChart('equity-chart'),color:portfolios.map(p=>p.color),legend:{top:0,type:'scroll',textStyle:{fontSize:12,color:baseChart().textStyle.color},itemWidth:16,itemHeight:3},tooltip:{...baseChart().tooltip,trigger:'axis',formatter:items=>escape(items[0]?.axisValue??'')+tooltipRows(items,p=>useMoney?money(p.value):percent(p.value/100))},grid:{left:useMoney?90:60,right:25,top:50,bottom:55},xAxis:{type:'category',boundaryGap:false,data:model.dates,axisLabel:{color:baseChart().textStyle.color,formatter:s=>s.slice(0,7),hideOverlap:true},axisLine:{lineStyle:{color:chartLine}}},yAxis:{type:'value',scale:view==='wealth',axisLabel:{color:baseChart().textStyle.color,formatter:v=>useMoney?number(v/1000)+t(' тыс.'):axisPercent(v)+'%'},splitLine:{lineStyle:{color:chartLine}}},dataZoom:[{type:'inside'},{type:'slider',height:15,bottom:5,borderColor:chartLine,fillerColor:accentSoft,handleStyle:{color:accent,borderColor:accent},moveHandleStyle:{color:accent},handleSize:14}],series:portfolios.map(p=>{const s=stat(p);return {name:portfolioName(p),type:'line',data:view==='wealth'?s.wealth.map(v=>v*capital):view==='return'?s.wealth.map(v=>(v-1)*100):s.drawdown.map(v=>v*100),symbol:'none',lineStyle:{width:p.id==='current'?3:2},emphasis:{focus:'series'}};})},true);
+}
+function renderMacroCharts() {
+  const macro=macroSeries(data),css=getComputedStyle(document.documentElement),line=css.getPropertyValue('--chart-line').trim();
+  const view=$('inflation-view').value;
+  const inflation={monthly:macro.monthlyInflation,annual:macro.annualInflation,total:macro.accumulatedInflation}[view];
+  const label={monthly:'Инфляция за месяц',annual:'Инфляция год к году',total:'Накопленная инфляция'}[view];
+  for(const [id,name,values,isMoney] of [['inflation-chart',label,inflation,false],['m2-chart','М2, млрд ₽',macro.moneySupply,true]]) {
+    chart(id).setOption({...baseChart(id),aria:{enabled:true,label:{description:t(name)}},grid:{left:isMoney?85:58,right:20,top:25,bottom:60},tooltip:{...baseChart(id).tooltip,trigger:'axis',formatter:items=>escape(items[0]?.axisValue??'')+tooltipRows(items,p=>p.value===null?t('Недостаточно истории'):isMoney?number(p.value)+' '+t('млрд ₽'):percent(p.value/100))},xAxis:{type:'category',boundaryGap:false,data:macro.dates,axisLabel:{formatter:date=>date.slice(0,7),hideOverlap:true}},yAxis:{type:'value',scale:isMoney,axisLabel:{formatter:value=>isMoney?number(value):axisPercent(value)+'%'},splitLine:{lineStyle:{color:line}}},dataZoom:[{type:'inside'},{type:'slider',height:15,bottom:5}],series:[{type:'line',name:t(name),symbol:'circle',showSymbol:values.filter(value=>value!==null).length===1,symbolSize:6,connectNulls:false,data:isMoney?values:values.map(value=>value===null?null:value*100),lineStyle:{color:colors[isMoney?1:0],width:3}}]},true);
+  }
 }
 function renderWeights() {
   if(activeTab!=='portfolio')return;
@@ -166,7 +178,7 @@ function savePortfolio() {
 function workbookDownload(book,name){XLSX.writeFile(book,name,{compression:true});}
 function exportChart(id) {
   const names={'frontier-chart':t('Эффективная_граница'),'weights-chart':t('Веса_портфелей'),'equity-chart':view==='wealth'?t('Капитал_портфелей'):view==='return'?t('Доходность_портфелей'):t('Просадки_портфелей')};
-  const reportNames={'report-frontier-chart':'Эффективная_граница','report-return-chart':'Доходность_портфелей','report-weights-chart':'Веса_портфелей','report-capital-chart':'Капитал_портфелей','report-drawdown-chart':'Просадки_портфелей','report-recovery-chart':'Восстановление_портфеля','report-comparison-chart':'Сравнение_портфелей'};
+  const reportNames={'report-frontier-chart':'Эффективная_граница','report-return-chart':'Доходность_портфелей','report-weights-chart':'Веса_портфелей','report-capital-chart':'Капитал_портфелей','report-drawdown-chart':'Просадки_портфелей','report-recovery-chart':'Восстановление_портфеля','report-comparison-chart':'Сравнение_портфелей','inflation-chart':'Инфляция','m2-chart':'Денежная_масса_М2'};
   const instance=charts[id]||getReportChart(id),filename=names[id]||t(reportNames[id]);
   if(!instance||!filename)throw Error('Сначала рассчитайте портфель.');
   const link=document.createElement('a');
@@ -174,63 +186,50 @@ function exportChart(id) {
   document.body.append(link);link.click();link.remove();
   message('Рисунок сохранён в SVG. Его можно вставить в отчёт или презентацию.');
 }
-function template() {
-  const d=demoData(),book=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([[t('Дата'),t('ИПЦ'),...d.names.map(n=>t(n))],...d.rows.map(r=>[r.date,Number(r.cpi.toFixed(6)),...r.values.map(v=>Number(v.toFixed(6)))])]),t('Данные'));
-  XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([[t('Памятка')],[t('Это синтетические данные, а не исторические котировки. Замените их своими рядами.')],[t('Первый лист: Дата, ИПЦ и ровно 10 индикаторов. Уровни положительны; даты строго возрастают.')],[t('ИПЦ — накопленный индекс цен (например 100, 100.5), не месячный процент инфляции.')],[t('Одна строка на конец каждого месяца; минимум 13 строк. Можно выбрать дневную или годовую частоту в приложении.')],[t('Все котировки и цены активов предварительно переведите в рубли. Для выплат используйте полную доходность.')],[t('Индикатор 1 — рублёвая масса М2. Его вес имеет учебную интерпретацию.')],[t('Введите реальные источники, единицы и описание выборки для вашей работы.')]]),t('Инструкция'));
-  workbookDownload(book,t('Шаблон_10_индикаторов.xlsx'));message('Excel-шаблон скачан. На первом листе замените учебные уровни своими данными.');
+function setReady(ready) {
+  document.querySelectorAll('[data-requires-data]').forEach(element=>element.disabled=!ready||(element.id==='backtest-run-button'&&data.rows.length<25));
+  $('export-button').disabled=!ready||!comparisonPortfolios().length;
+  $('report-portfolio').disabled=!ready;
 }
-function applyDataset(next,{profile,official=false}={}) {
+function applyDataset(next) {
+  if(next.demo!==false||next.official!==true)throw Error('Допускаются только данные официальных источников.');
   const old={data,model,optimizer,current,saved,signature,capital,rf,comparisonPeriod};
-  const ids=['mode','lambda','rf','frequency','first-indicator','capital'],fields=Object.fromEntries(ids.map(id=>[id,$(id).value]));
+  const fields=Object.fromEntries(['mode','lambda','rf','capital'].map(id=>[id,$(id).value]));
   try {
-    if(profile||official) {
-      $('frequency').value='12';$('first-indicator').value='m2';$('capital').value=String(capital);
-      $('rf').value=profile?'8':String((current?.settings.nominalRf??.08)*100);
-    }
-    data=next;signature='';model=null;saved=[];comparisonPeriod=null;$('mode').value=profile?'sharpe':'markowitz';$('lambda').value='3';modeFields();calculate({quiet:true});
-  }catch(error) {
+    data=next;signature='';model=null;saved=[];comparisonPeriod=null;
+    $('mode').value='markowitz';$('lambda').value='3';modeFields();calculate({quiet:true});
+  } catch(error) {
     ({data,model,optimizer,current,saved,signature,capital,rf,comparisonPeriod}=old);
-    for(const id of ids)$(id).value=fields[id];modeFields();throw error;
+    for(const [id,value] of Object.entries(fields))$(id).value=value;
+    modeFields();setReady(!!current);throw error;
   }
-  if(official){lastMessage=null;$('message').hidden=true;}
-}
-async function upload(file) {
-  if(!file)return;
-  if(!/\.(xlsx|xls)$/i.test(file.name))throw Error('Выберите файл .xlsx или .xls.');
-  if(file.size>10*1024*1024)throw Error('Файл должен быть не больше 10 МБ.');
-  const book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
-  if(!book.SheetNames.length)throw Error('В файле нет листов.');
-  const next=parseTable(XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,defval:null,raw:true}));
-  const parameters=book.Sheets['Параметры']?XLSX.utils.sheet_to_json(book.Sheets['Параметры'],{header:1}):[];
-  const declaredProfile=parameters.find(row=>row[0]==='Профиль')?.[1];
-  const profile=exampleProfiles.includes(declaredProfile)?declaredProfile:null;
-  applyDataset({...next,source:profile?'Учебный пример · синтетические данные':file.name,demo:!!profile},{profile});
-  if(profile)message('Учебный пример загружен. Максимум Шарпа, ставка 8%, месячные данные. Доля М2: {weight}.',false,{weight:percent(current.weights[0])});
-  else message('Excel загружен: {count} наблюдений, 10 индикаторов. Сравнение очищено; начальный расчёт выполнен по Марковицу с λ = 3.',false,{count:next.rows.length});
+  lastMessage=null;$('message').hidden=true;
 }
 function exportResults() {
   const book=XLSX.utils.book_new(),ps=comparisonPortfolios().map(p=>reportPortfolio(p,comparisonContext(),comparisonPeriod));
   if(!ps.length)throw Error('Сначала рассчитайте портфель.');
-  const portfolioModels=ps.map(p=>p.snapshot?.model||model),names=ps.map(p=>p.snapshot?.model.names.map(name=>p.snapshot.data.demo||p.snapshot.data.official?t(name):name)||indicatorNames());
+  const portfolioModels=ps.map(p=>p.snapshot?.model||model),names=ps.map(p=>p.snapshot?.model.names.map(name=>t(name))||indicatorNames());
   const weightNames=[...new Set(names.flat())],dates=[...new Set(portfolioModels.flatMap(m=>m.dates))].sort();
   const summary=[[t('Портфель'),t('Ожидаемая доходность / год'),t('Волатильность / год'),t('Шарп'),'CAGR',t('Историческая доходность'),t('Макс. просадка'),t('Макс. завершённое восстановление, дни'),t('Текущее восстановление, дни'),t('Ожидаемый реальный доход, ₽'),t('Макс. период восстановления, дни'),t('Максимальное восстановление незавершено')]];
   ps.forEach(p=>{const s=stat(p);summary.push([portfolioName(p),s.expectedReturn,s.risk,s.sharpe,s.cagr,s.totalReturn,s.maxDrawdown,s.longestRecovery,s.openRecovery,s.expectedIncome,s.maxRecovery,s.recoveryIncomplete?t('Да'):t('Нет')]);});
   const add=(rows,name)=>XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(rows),name);
   add(summary,t('Показатели'));add([[t('Индикатор'),...ps.map(p=>portfolioName(p))],...weightNames.map(name=>[name,...ps.map((p,i)=>{const index=names[i].indexOf(name);return index<0?0:p.weights[index];})])],t('Веса'));
-  const stats=ps.map(stat),dateIndexes=portfolioModels.map(m=>new Map(m.dates.map((date,i)=>[date,i])));
+  const stats=ps.map(p=>calculateComparisonStat(p,comparisonContext(),comparisonPeriod)),dateIndexes=portfolioModels.map(m=>new Map(m.dates.map((date,i)=>[date,i])));
   add([[t('Дата'),...ps.map(p=>portfolioName(p))],...dates.map(date=>[date,...stats.map((s,i)=>{const index=dateIndexes[i].get(date);return index===undefined?null:s.wealth[index]*capital;})])],t('Реальный капитал'));
   add([[t('Дата'),...ps.map(p=>portfolioName(p))],...dates.map(date=>[date,...stats.map((s,i)=>{const index=dateIndexes[i].get(date);return index===undefined?null:s.drawdown[index];})])],t('Просадки'));
   add([[t('Риск / год'),t('Ожид. доходность / год'),...indicatorNames()],...optimizer.frontier.map(p=>[p.risk,p.return,...p.weights])],t('Эффективная граница'));
-  add([[t('Дата'),t('ИПЦ'),...data.names.map(n=>data.demo?t(n):n)],...data.rows.map(r=>[r.date,r.cpi,...r.values])],t('Исходные данные'));
+  add([[t('Источник'),t('Ссылка'),t('Методика')],...(data.provenance||[]).map(source=>[t(source.name),source.url,t(source.method)])],t('Источники'));
+  add([[t('Дата'),t('ИПЦ'),...data.names.map(n=>t(n))],...data.rows.map(r=>[r.date,r.cpi,...r.values])],t('Исходные данные'));
   add([[t('Дата'),...indicatorNames()],...model.returns.map((r,i)=>[model.dates[i+1],...r])],t('Реальные доходности'));
-  add([[t('Параметр'),t('Значение')],[t('Источник'),(data.demo?t(data.source):data.source)],[t('Синтетические данные'),data.demo?t('Да'):t('Нет')],[t('Периодов в год'),model.frequency],[t('Начальный капитал, ₽'),capital],[t('Номинальная ставка'),current.settings.nominalRf],[t('Реальная безрисковая ставка'),rf],[t('Годовая инфляция'),model.inflation],[t('Индикатор 1'),indicatorNames()[0]],[t('Формула доходности'),t('(P_t/P_(t-1))/(ИПЦ_t/ИПЦ_(t-1))-1')],[t('Ожидаемая доходность'),t('Частота × средняя периодическая доходность')],[t('Ковариация'),t('Частота × выборочная ковариация')],[t('Ребалансировка'),t('Каждый период, без комиссий и налогов')],[t('Проверка прогноза'),t('Кривая построена на обучающей выборке; вневыборочной проверки нет')],...ps.map(p=>[t('Критерий: ')+portfolioName(p),JSON.stringify(p.settings)])],t('Методика'));
+  const macro=macroSeries(data);
+  add([[t('Дата'),t('Накопленная инфляция'),t('Инфляция за месяц'),t('Инфляция год к году'),t('М2, млрд ₽')],...macro.dates.map((date,i)=>[date,macro.accumulatedInflation[i],macro.monthlyInflation[i],macro.annualInflation[i],macro.moneySupply[i]])],t('Инфляция и М2'));
+  add([[t('Параметр'),t('Значение')],[t('Источник'),t(data.source)],[t('Периодов в год'),model.frequency],[t('Начальный капитал, ₽'),capital],[t('Номинальная ставка'),current.settings.nominalRf],[t('Реальная безрисковая ставка'),rf],[t('Годовая инфляция'),model.inflation],[t('М2'),t('Макропоказатель; исключён из инвестиционных весов')],[t('Формула доходности'),t('(P_t/P_(t-1))/(ИПЦ_t/ИПЦ_(t-1))-1')],[t('Ожидаемая доходность'),t('Частота × средняя периодическая доходность')],[t('Ковариация'),t('Частота × выборочная ковариация')],[t('Ребалансировка'),t('Каждый период, без комиссий и налогов')],[t('Проверка прогноза'),t('Кривая построена на обучающей выборке; вневыборочной проверки нет')],...ps.map(p=>[t('Критерий: ')+portfolioName(p),JSON.stringify(p.settings)])],t('Методика'));
   XLSX.utils.sheet_add_aoa(book.Sheets[t('Методика')],[[t('Период сравнения'),comparisonPeriod?comparisonPeriod.from+' — '+comparisonPeriod.to:t('Вся история')],[t('Базовый портфель'),portfolioName(comparisonPortfolios().find(p=>p.id===baselineId)||current)]],{origin:-1});
   ps.filter(p=>p.snapshot).forEach((p,i)=>{
-    const {data:source,model:sourceModel,frontier}=p.snapshot,prefix=t(p.profile?'Пример':'Портфель')+' '+(i+1)+' ';
-    add([[t('Дата'),t('ИПЦ'),...source.names.map(name=>source.demo||source.official?t(name):name)],...source.rows.map(row=>[row.date,row.cpi,...row.values])],prefix+t('Данные'));
-    add([[t('Дата'),...sourceModel.names.map(name=>source.demo||source.official?t(name):name)],...sourceModel.returns.map((row,index)=>[sourceModel.dates[index+1],...row])],prefix+t('Доходности'));
-    add([[t('Риск / год'),t('Ожид. доходность / год'),...sourceModel.names.map(name=>source.demo||source.official?t(name):name)],...frontier.map(point=>[point.risk,point.return,...point.weights])],prefix+t('Граница'));
+    const {data:source,model:sourceModel,frontier}=p.snapshot,prefix=t('Портфель')+' '+(i+1)+' ';
+    add([[t('Дата'),t('ИПЦ'),...source.names.map(name=>t(name))],...source.rows.map(row=>[row.date,row.cpi,...row.values])],prefix+t('Данные'));
+    add([[t('Дата'),...sourceModel.names.map(name=>t(name))],...sourceModel.returns.map((row,index)=>[sourceModel.dates[index+1],...row])],prefix+t('Доходности'));
+    add([[t('Риск / год'),t('Ожид. доходность / год'),...sourceModel.names.map(name=>t(name))],...frontier.map(point=>[point.risk,point.return,...point.weights])],prefix+t('Граница'));
     const method=book.Sheets[t('Методика')];
     XLSX.utils.sheet_add_aoa(method,[[t('Источник')+': '+portfolioName(p),prefix+t('Данные')],[t('Номинальная ставка')+': '+portfolioName(p),p.settings.nominalRf],[t('Реальная безрисковая ставка')+': '+portfolioName(p),p.settings.rf]],{origin:-1});
   });
@@ -239,16 +238,13 @@ function exportResults() {
 function guarded(action){return async(...args)=>{try{await action(...args);}catch(e){message(e.message||t('Не удалось выполнить действие.'),true);}};}
 
 function portfolioName(p) {
-  if(p.profile)return t('Учебный пример')+' · '+t(p.name);
   const base=t(modes[p.mode]);
   if(p.initial)return base+' · λ = 3';
   if(!p.ordinal)return base;
   const suffix=p.mode==='markowitz'?' · λ = '+p.settings.lambda:p.mode==='risk'?t(' · цель ')+percent(p.settings.targetReturn):p.mode==='return'?t(' · риск ≤ ')+percent(p.settings.targetRisk):'';
   return base+suffix+' #'+p.ordinal;
 }
-function indicatorNames() {
-  return model.names.map((name,i)=>signature.endsWith(':true')&&i===0?t('Рублёвый остаток'):data.demo||data.official?t(name):name);
-}
+function indicatorNames() {return model.names.map(name=>t(name));}
 function sameCriterion(portfolio,mode,settings) {
   if(portfolio.snapshot||portfolio.mode!==mode)return false;
   const key={markowitz:'lambda',sharpe:'rf',risk:'targetReturn',return:'targetRisk'}[mode];
@@ -289,19 +285,6 @@ async function addCriteriaToComparison(modesToAdd) {
     requestAnimationFrame(()=>$('message').scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'}));
   }
 }
-async function addExamplesToComparison() {
-  const buttons=[$('compare-examples-button'),$('compare-data-examples-button')];
-  buttons.forEach(button=>button.disabled=true);
-  try {
-    examples??=await loadExamplePortfolios();
-    const missing=examples.filter(example=>!saved.some(p=>p.profile===example.profile));
-    if(saved.length+missing.length>8)throw Error('Можно сравнивать до 8 сохранённых портфелей. Удалите один, чтобы добавить новый.');
-    for(const example of missing)saved.push({...example,id:'p'+(++sequence),color:colors.slice(1).find(color=>!saved.some(p=>p.color===color)),weights:[...example.weights]});
-    saved.filter(p=>p.profile).forEach(p=>p.visible=true);
-    renderComparison();syncReportSelector();renderCharts();
-    message('Три учебных портфеля готовы к сравнению. Каждый использует свои синтетические данные и ставку 8%.');
-  } finally {buttons.forEach(button=>button.disabled=false);}
-}
 function syncReportSelector() {
   if(!current)return;
   if(!allPortfolios().some(p=>p.id===selectedReportId))selectedReportId='current';
@@ -311,11 +294,11 @@ function syncReportSelector() {
 function renderReportFigures() {
   if(!current)return;
   syncReportSelector();
-  renderReport({model,frontier:optimizer.frontier,portfolios:allPortfolios().map(original=>{const p=reportPortfolio(original,comparisonContext(),original.compared!==false?comparisonPeriod:null);return {...p,displayName:portfolioName(p),indicatorNames:p.snapshot?.model.names.map(name=>p.snapshot.data.demo||p.snapshot.data.official?t(name):name)||indicatorNames()};}),stats:stat,indicatorNames:indicatorNames(),colors,selectedId:selectedReportId,capital,comparisonView:reportView});
+  renderReport({model,frontier:optimizer.frontier,portfolios:allPortfolios().map(original=>{const p=reportPortfolio(original,comparisonContext(),original.compared!==false?comparisonPeriod:null);return {...p,displayName:portfolioName(p),indicatorNames:p.snapshot?.model.names.map(name=>t(name))||indicatorNames()};}),stats:stat,indicatorNames:indicatorNames(),colors,selectedId:selectedReportId,capital,comparisonView:reportView});
 }
 function resizeVisibleCharts() {
   if(activeTab==='portfolio')Object.values(charts).forEach(c=>c.resize());
-  if(activeTab==='graphs')resizeReport();
+  if(activeTab==='graphs'){resizeReport();for(const id of ['inflation-chart','m2-chart'])charts[id]?.resize();}
   if(activeTab==='backtest')backtestView?.resize();
 }
 function activateTab(name,{focus=false,updateHash=true}={}) {
@@ -342,6 +325,7 @@ function preferenceLabels() {
   $('theme-button').setAttribute('aria-pressed',String(theme==='dark'));
 }
 captureStaticTranslations();setTheme(theme);translateStatic();preferenceLabels();
+try{discardGeneratedComparisonSets(localStorage);}catch{/* Browser storage may be unavailable. */}
 function refreshPreferences() {
   translateStatic();preferenceLabels();modeFields();
   if(current)render();
@@ -357,29 +341,18 @@ $('theme-button').addEventListener('click',()=>{
 });
 
 $('mode').addEventListener('change',modeFields);
-$('optimization-form').addEventListener('submit',guarded(async e=>{e.preventDefault();$('calculate-button').disabled=true;$('save-button').disabled=true;try{await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));calculate();}finally{$('calculate-button').disabled=false;$('save-button').disabled=false;}}));
+$('optimization-form').addEventListener('submit',guarded(async e=>{e.preventDefault();$('calculate-button').disabled=true;$('save-button').disabled=true;try{await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));calculate();}finally{$('calculate-button').disabled=!current;$('save-button').disabled=!current;}}));
 $('save-button').addEventListener('click',guarded(savePortfolio));
-$('compare-examples-button').addEventListener('click',guarded(()=>addExamplesToComparison()));
-$('compare-data-examples-button').addEventListener('click',guarded(async()=>{activateTab('comparison');await addExamplesToComparison();}));
 $('compare-all-button').addEventListener('click',()=>addCriteriaToComparison(['markowitz','sharpe','risk','return']));
 document.querySelectorAll('[data-add-criterion]').forEach(button=>button.addEventListener('click',()=>addCriteriaToComparison([button.dataset.addCriterion])));
-$('template-button').addEventListener('click',guarded(template));
 $('export-button').addEventListener('click',guarded(exportResults));
 document.querySelectorAll('[data-download]').forEach(button=>button.addEventListener('click',guarded(()=>exportChart(button.dataset.download))));
-$('file-input').addEventListener('change',guarded(async e=>{try{await upload(e.target.files[0]);}finally{e.target.value='';}}));
-const uploadFrame=$('upload-frame');
-let uploadDragDepth=0;
-uploadFrame.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file-input').click();}});
-uploadFrame.addEventListener('dragenter',e=>{e.preventDefault();uploadDragDepth++;uploadFrame.classList.add('dragging');});
-uploadFrame.addEventListener('dragover',e=>{e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';});
-uploadFrame.addEventListener('dragleave',e=>{e.preventDefault();uploadDragDepth=Math.max(0,uploadDragDepth-1);if(!uploadDragDepth)uploadFrame.classList.remove('dragging');});
-uploadFrame.addEventListener('drop',guarded(async e=>{e.preventDefault();uploadDragDepth=0;uploadFrame.classList.remove('dragging');await upload(e.dataTransfer?.files[0]);}));
-$('demo-button').addEventListener('click',guarded(()=>{data=demoData();model=null;signature='';saved=[];comparisonPeriod=null;$('frequency').value='12';$('first-indicator').value='m2';$('mode').value='sharpe';$('rf').value='8';$('capital').value='1000000';modeFields();calculate({quiet:true,initial:true});message('Учебные данные восстановлены.');}));
 $('comparison-cards').addEventListener('change',e=>{const p=allPortfolios().find(p=>p.id===e.target.dataset.toggle);if(p){p.visible=e.target.checked;renderCharts();}});
 $('comparison-cards').addEventListener('click',e=>{const id=e.target.dataset.remove;if(id){if(id==='current')current.compared=false;else saved=saved.filter(p=>p.id!==id);renderComparison();syncReportSelector();renderCharts();message('Портфель убран из сравнения.');}});
 $('weights-view').addEventListener('change',renderWeights);
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));renderCharts();}));
 $('report-portfolio').addEventListener('change',()=>{selectedReportId=$('report-portfolio').value;renderReportFigures();});
+$('inflation-view').addEventListener('change',()=>{if(current&&activeTab==='graphs')renderMacroCharts();});
 $('report-comparison-view').addEventListener('change',()=>{reportView=$('report-comparison-view').value;renderReportFigures();});
 document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>activateTab(button.dataset.tab)));
 document.querySelector('.app-tabs').addEventListener('keydown',e=>{
@@ -391,21 +364,21 @@ document.querySelector('.app-tabs').addEventListener('keydown',e=>{
 document.querySelectorAll('[data-open-tab],[data-scroll-target]').forEach(button=>button.addEventListener('click',e=>{
   e.preventDefault();
   if(button.dataset.openTab)activateTab(button.dataset.openTab);
-  if(button.dataset.scrollTarget)requestAnimationFrame(()=>$('report-comparison').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'}));
+  if(button.dataset.scrollTarget)requestAnimationFrame(()=>$(button.dataset.scrollTarget)?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'}));
 }));
 window.addEventListener('hashchange',()=>activateTab(location.hash.slice(1),{updateHash:false}));
 $('method-button').addEventListener('click',()=>$('method-dialog').showModal());
 $('close-method').addEventListener('click',()=>$('method-dialog').close());
 $('method-dialog').addEventListener('click',e=>{if(e.target===$('method-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
 new ResizeObserver(resizeVisibleCharts).observe(document.querySelector('.app-main'));
-backtestView=createBacktestView(()=>current?{data,frequency:model.frequency,cash:signature.endsWith(':true'),capital,nominalRf:current.settings.nominalRf}:null);
-importView=createDataImportView({applyDataset,uploadExample:async file=>{await upload(file);activateTab('portfolio');}});
+backtestView=createBacktestView(()=>current?{data,frequency:model.frequency,capital,nominalRf:current.settings.nominalRf}:null);
+importView=createDataImportView({applyDataset,onUnavailable:()=>{if(!current){$('data-status').textContent=t('Нет данных');$('data-badge').textContent=t('Нет данных');setReady(false);message('Статистика недоступна. Откройте «Данные» и повторите загрузку.',true);}}});
 comparisonControls=createComparisonControls({getState:comparisonState,onPeriod:setComparisonPeriod,onRestore:restoreComparisonState,onBaseline:id=>{baselineId=id;renderComparison();},onHighlight:value=>{highlightComparison=value;renderComparison();},portfolioName,message});
-modeFields();
+modeFields();setReady(false);
+activateTab(location.hash.slice(1)||'portfolio',{updateHash:false});
 try {
   if(!window.echarts||!window.XLSX)throw Error(t('Не загрузились библиотеки графиков или Excel. Перезапустите приложение.'));
-  try {examples=await loadExamplePortfolios();}catch(e){message(e.message,true);}
-  calculate({quiet:true,initial:true});
+  await importView.initialize();
 }catch(e){message(e.message,true);}
 activateTab(location.hash.slice(1)||'portfolio',{updateHash:false});
 document.fonts.ready.then(()=>requestAnimationFrame(()=>{if(current){resizeVisibleCharts();renderCharts();}}));

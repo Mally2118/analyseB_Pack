@@ -1,433 +1,134 @@
 import {test,expect} from '@playwright/test';
 import XLSX from 'xlsx';
 import {readFile} from 'node:fs/promises';
+import {officialSnapshot} from './fixtures.mjs';
+import {selectSnapshotPeriod} from '../dist/market-data-client.js';
+import {estimate,createOptimizer,metrics} from '../dist/engine.js';
+const snapshot=officialSnapshot();
+const initial=selectSnapshotPeriod(snapshot,snapshot.rows.slice(-60)[0].date.slice(0,7),snapshot.period.to);
+const model=estimate(initial),rf=1.08/(1+model.inflation)-1;
+const solution=createOptimizer(model).solve('markowitz',{lambda:3,rf});
+const chart=(page,id)=>page.evaluate(id=>echarts.getInstanceByDom(document.getElementById(id)).getOption(),id);
+async function tab(page,name){await page.locator('#tab-'+name).click();await expect(page.locator('#panel-'+name)).toBeVisible();}
+async function ready(page){await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();}
+async function download(page,testInfo,selector,name){const waiting=page.waitForEvent('download');await page.locator(selector).click();const d=await waiting;const file=testInfo.outputPath(name);await d.saveAs(file);return {file,bytes:await readFile(file)};}
 
-const tabs=['portfolio','graphs','comparison','backtest','data','help'];
-const primaryCharts=['frontier-chart','equity-chart','weights-chart'];
-const individualCharts=['report-frontier-chart','report-return-chart','report-weights-chart','report-capital-chart','report-drawdown-chart','report-recovery-chart'];
-const reportCharts=[...individualCharts,'report-comparison-chart'];
-async function activateTab(page,name) {
-  await page.locator('#tab-'+name).click();
-  for(const tab of tabs) {
-    await expect(page.locator('#tab-'+tab)).toHaveAttribute('aria-selected',String(tab===name));
-    if(tab===name)await expect(page.locator('#panel-'+tab)).toBeVisible();
-    else await expect(page.locator('#panel-'+tab)).toBeHidden();
-  }
-  if(name==='graphs')for(const id of reportCharts)await expect(page.locator('#'+id+' svg')).toBeVisible();
-  if(name==='portfolio')await expect(page.locator('#equity-chart svg')).toBeVisible();
-}
-const chartSeries=(page,ids)=>page.evaluate(ids=>ids.map(id=>echarts.getInstanceByDom(document.getElementById(id)).getOption().series),ids);
-const chartCounts=async(page,ids)=>(await chartSeries(page,ids)).map(series=>series.length);
-async function expectNoOverflow(page) {
-  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
-}
-async function downloadSvg(page,testInfo,id) {
-  const downloading=page.waitForEvent('download',{timeout:10000});
-  await page.locator('[data-download="'+id+'"]').click();
-  const download=await downloading;
-  expect(download.suggestedFilename()).toMatch(/\.svg$/);
-  const file=testInfo.outputPath(id+'.svg');await download.saveAs(file);
-  const svg=await readFile(file,'utf8');expect(svg).toContain('<svg');expect(svg).toContain('</svg>');
-  return {download,svg};
-}
-
-test('four criteria, saved portfolios, validation and Excel roundtrip work across tabs',async({page},testInfo)=>{
+// These expectations are computed from the actual official snapshot, not fixed demo weights.
+test('startup uses published source observations and excludes M2 from every portfolio criterion',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/');
-  await expect(page.locator('#current-title')).toHaveText('Максимум Шарпа');
-  await expect(page.locator('#indicators-table tbody tr')).toHaveCount(10);
-  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);
-  await expect(page.locator('#equity-chart svg')).toBeVisible();
-  await expect(page.locator('#panel-portfolio')).toBeVisible();
-  await expect(page.locator('#message')).toBeHidden();
-  await page.screenshot({path:testInfo.outputPath('desktop.png'),fullPage:true});
-  for(const mode of ['markowitz','sharpe','risk','return']) {
-    await page.selectOption('#mode',mode);
-    await page.click('#calculate-button');
-    await expect(page.locator('#calculate-button')).toBeEnabled();
-    await expect(page.locator('#current-title')).toHaveText({markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность'}[mode]);
+  const exampleRequests=[];page.on('request',r=>{if(r.url().includes('/examples/'))exampleRequests.push(r.url());});
+  await ready(page);
+  await expect(page.locator('#data-badge')).toHaveText('Официальные данные');
+  await expect(page.locator('#mode')).toHaveValue('markowitz');
+  await expect(page.locator('#indicators-table tbody tr')).toHaveCount(9);
+  expect(await page.locator('#indicators-table tbody').textContent()).not.toMatch(/М2/);
+  expect((await chart(page,'equity-chart')).series[0].data).toEqual(metrics(model,solution.weights,rf).wealth.map(v=>(v-1)*100));
+  for(const mode of ['markowitz','sharpe','risk','return']){
+    await page.selectOption('#mode',mode);await page.click('#calculate-button');
     await expect(page.locator('#message')).not.toHaveClass(/error/);
-    await page.click('#save-button');
-    await expect(page.locator('#panel-portfolio')).toBeVisible();
+    const weights=(await chart(page,'weights-chart')).series[0].data;
+    expect(weights.every(p=>!p.name.includes('М2'))).toBeTruthy();
+    expect(weights.reduce((s,p)=>s+p.value,0)).toBeCloseTo(100,6);
   }
-  await activateTab(page,'comparison');
-  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(8);
-  await activateTab(page,'graphs');
-  await expect(page.locator('#report-portfolio option')).toHaveCount(8);
-  expect(await chartCounts(page,individualCharts)).toEqual([2,1,1,1,1,1]);
-  expect(await chartCounts(page,['report-comparison-chart'])).toEqual([8]);
-  await activateTab(page,'portfolio');
-  await page.locator('[data-view="drawdown"]').click();
-  await expect(page.locator('[data-view="drawdown"]')).toHaveClass('active');
-  const previous=await page.locator('#risk-value').textContent();
-  await page.selectOption('#mode','return');await page.fill('#target-risk','0');await page.click('#calculate-button');
-  await expect(page.locator('#message')).toHaveClass(/error/);
-  await expect(page.locator('#risk-value')).toHaveText(previous);
-  await page.selectOption('#mode','markowitz');
-  await expect(page.locator('#first-indicator')).toBeDisabled();
-  await expect(page.locator('#first-indicator')).toHaveValue('m2');
-  await expect(page.locator('#first-indicator option')).toHaveCount(1);
-  await activateTab(page,'data');
-  await expect(page.locator('#indicators-table tbody tr').first()).toContainText('Рублёвая масса М2');
-  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(8);
-  await page.click('#demo-button');
-  const downloadPromise=page.waitForEvent('download');await page.click('#template-button');const download=await downloadPromise;
-  const file=testInfo.outputPath('template.xlsx');await download.saveAs(file);
-  await page.locator('#file-input').setInputFiles(file);
-  await expect(page.locator('#data-badge')).toHaveText('Ваш Excel');
-  await expect(page.locator('#current-title')).toHaveText('Марковиц');
+  expect(exampleRequests).toEqual([]);expect(errors).toEqual([]);
+});
+
+test('inflation and M2 charts match source ratios and export SVG, with unavailable history left empty',async({page},testInfo)=>{
+  await ready(page);await tab(page,'graphs');
+  let option=await chart(page,'inflation-chart');
+  expect(option.series[0].data.slice(0,12)).toEqual(Array(12).fill(null));
+  expect(option.series[0].data[12]).toBeCloseTo((initial.rows[12].cpi/initial.rows[0].cpi-1)*100,8);
+  await page.selectOption('#inflation-view','monthly');option=await chart(page,'inflation-chart');
+  expect(option.series[0].data[0]).toBeNull();expect(option.series[0].data[1]).toBeCloseTo((initial.rows[1].cpi/initial.rows[0].cpi-1)*100,8);
+  await page.selectOption('#inflation-view','total');option=await chart(page,'inflation-chart');
+  expect(option.series[0].data).toEqual(initial.rows.map(row=>(row.cpi/initial.rows[0].cpi-1)*100));
+  expect((await chart(page,'m2-chart')).series[0].data).toEqual(initial.rows.map(row=>row.values[0]));
+  const svg=await download(page,testInfo,'[data-download="inflation-chart"]','inflation.svg');expect(svg.bytes.toString()).toContain('<svg');
+  await page.screenshot({path:testInfo.outputPath('official-macro-desktop.png'),fullPage:true});
+});
+
+test('comparison, removal, common period, saved sets and Excel keep nine investable rows and source macro levels',async({page},testInfo)=>{
+  await ready(page);await tab(page,'comparison');await page.click('#compare-all-button');
   await expect(page.locator('#message')).not.toHaveClass(/error/);
-  await activateTab(page,'comparison');
-  const exportPromise=page.waitForEvent('download');await page.click('#export-button');const exported=await exportPromise;
-  const output=testInfo.outputPath('results.xlsx');await exported.saveAs(output);const workbook=XLSX.read(await readFile(output),{type:'buffer'});
-  expect(workbook.SheetNames).toEqual(['Показатели','Веса','Реальный капитал','Просадки','Эффективная граница','Исходные данные','Реальные доходности','Методика']);
-  const weights=XLSX.utils.sheet_to_json(workbook.Sheets['Веса'],{header:1}).slice(1).reduce((s,r)=>s+r[1],0);expect(weights).toBeCloseTo(1,8);
-  const bad=XLSX.utils.book_new();XLSX.utils.book_append_sheet(bad,XLSX.utils.aoa_to_sheet([['Дата','ИПЦ'],['2020-01-31',100]]),'Данные');
-  await activateTab(page,'data');
-  await page.locator('#file-input').setInputFiles({name:'bad.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(XLSX.write(bad,{type:'buffer',bookType:'xlsx'}))});
-  await expect(page.locator('#message')).toHaveClass(/error/);await expect(page.locator('#indicators-table tbody tr')).toHaveCount(10);
-  await page.click('#method-button');await expect(page.locator('#method-dialog')).toBeVisible();await page.keyboard.press('Escape');await expect(page.locator('#method-dialog')).toBeHidden();
-  expect(errors).toEqual([]);
-});
-
-test('mobile tabs, individual report drawings and controls fit the viewport',async({page},testInfo)=>{
-  await page.setViewportSize({width:390,height:844});await page.goto('/');
-  await expect(page.locator('#expected-income')).not.toHaveText('—');
-  await page.screenshot({path:testInfo.outputPath('mobile.png'),fullPage:true});
-  await expectNoOverflow(page);
-  await page.click('#save-button');await expect(page.locator('#comparison-table tbody tr')).toHaveCount(5);
-  for(const tab of ['graphs','data','comparison','backtest','help','portfolio']) {
-    await activateTab(page,tab);
-    await expectNoOverflow(page);
-    if(tab==='graphs') {
-      for(const id of reportCharts)await expect(page.locator('#'+id+' svg')).toBeVisible();
-      expect(await chartCounts(page,individualCharts)).toEqual([2,1,1,1,1,1]);
-      expect(await chartCounts(page,['report-comparison-chart'])).toEqual([5]);
-      await page.screenshot({path:testInfo.outputPath('mobile-graphs.png'),fullPage:true});
-    }
-  }
-});
-
-test('current charts stay separate, the final report compares portfolios and all drawings export SVG',async({page},testInfo)=>{
-  test.setTimeout(45000);
-  await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();
-  await expect(page.locator('[data-view="return"]')).toHaveClass('active');
-  const initial=await page.evaluate(()=>{
-    const get=id=>echarts.getInstanceByDom(document.getElementById(id)).getOption();
-    return {frontier:get('frontier-chart').series[0].data,curve:get('equity-chart').series[0].data,pie:get('weights-chart').series[0].data};
-  });
-  expect(initial.frontier).toHaveLength(65);expect(initial.curve).toHaveLength(85);expect(initial.curve[0]).toBe(0);
-  expect(initial.frontier.every(p=>p.length===2&&p.every(Number.isFinite))).toBeTruthy();
-  expect(initial.pie.reduce((s,p)=>s+p.value,0)).toBeCloseTo(100,6);
-  expect(await chartCounts(page,primaryCharts)).toEqual([2,1,1]);
-  const hovered=await page.evaluate(()=>{const c=echarts.getInstanceByDom(document.getElementById('weights-chart'));c.dispatchAction({type:'showTip',seriesIndex:0,dataIndex:0});return c.getOption().series[0].data[0].name;});
-  await expect(page.locator('#weights-chart')).toContainText(hovered);
-  await page.click('#save-button');
-  expect(await chartCounts(page,primaryCharts)).toEqual([2,1,1]);
-  await activateTab(page,'graphs');
-  await expect(page.locator('#report-portfolio option')).toHaveCount(5);
-  expect(await chartCounts(page,individualCharts)).toEqual([2,1,1,1,1,1]);
-  const report=await chartSeries(page,individualCharts);
-  expect(report[0][0].data).toEqual(initial.frontier);
-  expect(report[1][0].data).toEqual(initial.curve);
-  expect(report[2][0].data.map(p=>p.value)).toEqual(initial.pie.map(p=>p.value));
-  const selected=await page.locator('#report-portfolio option').nth(1).getAttribute('value');
-  await page.selectOption('#report-portfolio',selected);
-  expect(await chartCounts(page,individualCharts)).toEqual([2,1,1,1,1,1]);
-  const selectedReport=(await chartSeries(page,individualCharts)).map(series=>series.map(s=>s.data));
-  const finalPosition=await page.evaluate(()=>{
-    const bottom=document.getElementById('report-comparison-chart').getBoundingClientRect();
-    return ['report-frontier-chart','report-return-chart','report-weights-chart','report-capital-chart','report-drawdown-chart','report-recovery-chart'].every(id=>document.getElementById(id).getBoundingClientRect().bottom<=bottom.top);
-  });
-  expect(finalPosition).toBeTruthy();
-  for(const mode of ['return','wealth','drawdown','recovery','frontier','weights']) {
-    await page.selectOption('#report-comparison-view',mode);
-    expect(await chartCounts(page,['report-comparison-chart'])).toEqual([mode==='frontier'?9:5]);
-    expect((await chartSeries(page,individualCharts)).map(series=>series.map(s=>s.data))).toEqual(selectedReport);
-  }
-  await page.selectOption('#report-comparison-view','return');
-  await activateTab(page,'comparison');
-  await page.locator('[data-toggle]').first().uncheck();
-  await activateTab(page,'graphs');
-  expect(await chartCounts(page,['report-comparison-chart'])).toEqual([4]);
-  expect((await chartSeries(page,individualCharts)).map(series=>series.map(s=>s.data))).toEqual(selectedReport);
-  await activateTab(page,'portfolio');
-  expect(await chartCounts(page,primaryCharts)).toEqual([2,1,1]);
-  expect((await chartSeries(page,['equity-chart']))[0][0].data).toEqual(initial.curve);
-  await activateTab(page,'comparison');await page.locator('[data-toggle]').first().check();
-  await activateTab(page,'portfolio');
-  for(const id of primaryCharts)await downloadSvg(page,testInfo,id);
-  await activateTab(page,'graphs');
-  for(const id of reportCharts)await downloadSvg(page,testInfo,id);
-});
-
-test('known imported path matches all separate graphs, income, volatility, drawdown and recovery metrics',async({page},testInfo)=>{
-  const levels=[100,80,100,90,81,81,81,81,81,81,81,81,81];
-  const dates=levels.map((_,i)=>new Date(Date.UTC(2020,i+1,0)).toISOString().slice(0,10));
-  const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['Дата','ИПЦ',...Array.from({length:10},(_,i)=>'Индикатор '+(i+1))],...levels.map((v,i)=>[dates[i],100,...Array(10).fill(v)])]),'Данные');
-  await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();
-  await activateTab(page,'data');
-  await page.locator('#file-input').setInputFiles({name:'known.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(XLSX.write(book,{type:'buffer',bookType:'xlsx'}))});
-  await expect(page.locator('#data-badge')).toHaveText('Ваш Excel');await expect(page.locator('#message')).not.toHaveClass(/error/);
-  await activateTab(page,'portfolio');
-  await expect(page.locator('#expected-income')).toHaveText('-150\u00a0000 ₽');
-  await expect(page.locator('#drawdown-value')).toHaveText('-20,00\u00a0%');
-  await expect(page.locator('#recovery-value')).toHaveText('≥ 306 дн.');
-  const graph=(await chartSeries(page,['equity-chart']))[0][0].data;
-  graph.forEach((v,i)=>expect(v).toBeCloseTo(levels[i]-100,6));
-  await page.locator('[data-view="wealth"]').click();
-  const capital=(await chartSeries(page,['equity-chart']))[0][0].data;
-  capital.forEach((v,i)=>expect(v).toBeCloseTo(levels[i]*10000,5));
-  await page.locator('[data-view="drawdown"]').click();
-  const drawdown=(await chartSeries(page,['equity-chart']))[0][0].data;
-  expect(Math.min(...drawdown)).toBeCloseTo(-20,6);
-  await activateTab(page,'graphs');
-  await expect(page.locator('#report-income')).toHaveText('-150\u00a0000 ₽');
-  await expect(page.locator('#report-risk')).toHaveText(await page.locator('#risk-value').textContent());
-  await expect(page.locator('#report-drawdown')).toHaveText('-20,00\u00a0%');
-  await expect(page.locator('#report-recovery')).toHaveText('≥ 306 дн.');
-  const report=await chartSeries(page,individualCharts);
-  report[1][0].data.forEach((v,i)=>expect(v).toBeCloseTo(levels[i]-100,6));
-  report[3][0].data.forEach((v,i)=>expect(v).toBeCloseTo(levels[i]*10000,5));
-  expect(report[4][0].data).toEqual(drawdown);
-  expect(report[5][0].data).toEqual([0,29,0,30,61,91,122,153,183,214,244,275,306]);
-  expect(report[2][0].data.reduce((s,p)=>s+p.value,0)).toBeCloseTo(100,6);
-  await activateTab(page,'comparison');
-  const downloading=page.waitForEvent('download');await page.click('#export-button');const download=await downloading;
-  const file=testInfo.outputPath('known-results.xlsx');await download.saveAs(file);
-  const result=XLSX.read(await readFile(file),{type:'buffer'}),[headers,row]=XLSX.utils.sheet_to_json(result.Sheets['Показатели'],{header:1});
-  const s=Object.fromEntries(headers.map((h,i)=>[h,row[i]]));
-  expect(s['Ожидаемая доходность / год']).toBeCloseTo(-.15,8);
-  expect(s['Ожидаемый реальный доход, ₽']).toBeCloseTo(-150000,6);
-  expect(s['Волатильность / год']).toBeCloseTo(Math.sqrt((.1225-12*.0125**2)/11*12),8);
-  expect(s['CAGR']).toBeCloseTo(-.19,8);expect(s['Макс. просадка']).toBeCloseTo(-.2,8);
-  expect(s['Макс. период восстановления, дни']).toBe(306);expect(s['Максимальное восстановление незавершено']).toBe('Да');
-});
-
-test('invalid hidden controls do not block other criteria and hidden charts resize after tab activation',async({page})=>{
-  await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();
-  await page.selectOption('#mode','return');await page.fill('#target-risk','-5');
-  await page.selectOption('#mode','markowitz');await expect(page.locator('#target-risk')).toBeDisabled();
-  await page.fill('#lambda','4');await page.click('#calculate-button');await expect(page.locator('#current-title')).toHaveText('Марковиц');
-  await page.click('#save-button');
-  await activateTab(page,'graphs');
-  const selected=await page.locator('#report-portfolio option').nth(1).getAttribute('value');
-  await page.selectOption('#report-portfolio',selected);
-  await activateTab(page,'data');
-  await page.setViewportSize({width:390,height:844});
-  await activateTab(page,'graphs');
-  await expect.poll(()=>page.evaluate(ids=>ids.every(id=>{const element=document.getElementById(id),chart=echarts.getInstanceByDom(element);return element.clientWidth>200&&chart.getWidth()===element.clientWidth&&chart.getHeight()===element.clientHeight;}),reportCharts)).toBeTruthy();
-  await expectNoOverflow(page);
-  await activateTab(page,'comparison');
-  await page.locator('[data-remove="'+selected+'"]').click();
-  await activateTab(page,'graphs');
-  await expect(page.locator('#report-portfolio')).toHaveValue('current');
-  await activateTab(page,'portfolio');
-  await expect.poll(()=>page.evaluate(ids=>ids.every(id=>{const element=document.getElementById(id),chart=echarts.getInstanceByDom(element);return chart.getWidth()===element.clientWidth&&chart.getHeight()===element.clientHeight;}),primaryCharts)).toBeTruthy();
-  await page.click('#save-button');
-  await activateTab(page,'comparison');
-  const colorValues=await page.locator('.portfolio-chip .swatch').evaluateAll(els=>els.map(el=>el.style.background));
-  expect(new Set(colorValues).size).toBe(colorValues.length);
-});
-
-test('language and theme switching preserve tab, report selection, portfolio data and translated charts',async({page},testInfo)=>{
-  const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();
-  await page.selectOption('#mode','markowitz');await page.fill('#lambda','4');await page.click('#calculate-button');
-  await expect(page.locator('#current-title')).toHaveText('Марковиц');await page.click('#save-button');
-  await page.locator('[data-view="drawdown"]').click();
-  await activateTab(page,'comparison');await page.locator('[data-toggle]').first().uncheck();
-  await activateTab(page,'graphs');
-  const selected=await page.locator('#report-portfolio option').nth(2).getAttribute('value');
-  await page.selectOption('#report-portfolio',selected);
-  await page.selectOption('#report-comparison-view','drawdown');
-  const ids=[...primaryCharts,...reportCharts];
-  const series=async()=>(await chartSeries(page,ids)).map(series=>series.map(s=>s.type==='pie'?s.data.map(p=>p.value):s.data));
-  const before=await series();
-  await page.click('#language-button');
-  await expect(page.locator('html')).toHaveAttribute('lang','en');
-  await expect(page.locator('#calculate-button')).toHaveText('Calculate portfolio');
-  await expect(page.locator('#current-title')).toHaveText('Markowitz');
-  await expect(page.locator('#message')).toContainText('Portfolio “Markowitz');
   await expect(page.locator('#comparison-table tbody tr')).toHaveCount(5);
-  await expect(page.locator('[data-toggle]').first()).not.toBeChecked();
-  await expect(page.locator('[data-view="drawdown"]')).toHaveClass('active');
-  await expect(page.locator('#lambda')).toHaveValue('4');
-  await expect(page.locator('#panel-graphs')).toBeVisible();
-  await expect(page.locator('#report-portfolio')).toHaveValue(selected);
-  await expect(page.locator('#report-comparison-view')).toHaveValue('drawdown');
-  expect(await page.evaluate(()=>document.body.innerText.match(/[А-Яа-яЁё]+/g))).toBeNull();
-  const english=await series();expect(english).toEqual(before);
-  await page.click('#theme-button');await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
-  await expect(page.locator('#theme-button')).toHaveText('☀ Light theme');
-  await expect(page.locator('#theme-button')).toHaveAttribute('aria-pressed','true');
-  expect(await series()).toEqual(english);
-  const backgrounds=await page.evaluate(ids=>({surface:getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(),charts:ids.map(id=>echarts.getInstanceByDom(document.getElementById(id)).getOption().backgroundColor)}),reportCharts);
-  expect(backgrounds.charts).toEqual(reportCharts.map(()=>backgrounds.surface));
-  await page.click('#method-button');await expect(page.locator('#method-dialog')).toBeVisible();
-  expect(await page.locator('#method-dialog').innerText()).not.toMatch(/[А-Яа-яЁё]/);
-  await page.screenshot({path:testInfo.outputPath('english-dark-method.png'),fullPage:true});
-  await page.click('#close-method');
-  await activateTab(page,'portfolio');
-  expect(await page.evaluate(ids=>ids.map(id=>echarts.getInstanceByDom(document.getElementById(id)).getOption().backgroundColor),primaryCharts)).toEqual(primaryCharts.map(()=>backgrounds.surface));
-  expect(await series()).toEqual(english);
-  const {download,svg}=await downloadSvg(page,testInfo,'frontier-chart');
-  expect(download.suggestedFilename()).toBe('Efficient_frontier.svg');
-  expect(svg).toContain('Risk, % / year');expect(svg).toContain('Return, % / year');expect(svg).toContain(backgrounds.surface);
-  await activateTab(page,'graphs');
-  const reportSvg=await downloadSvg(page,testInfo,'report-recovery-chart');
-  expect(reportSvg.svg).not.toMatch(/[А-Яа-яЁё]/);
-  await page.setViewportSize({width:390,height:844});
-  await expectNoOverflow(page);
-  await page.screenshot({path:testInfo.outputPath('english-dark-mobile.png'),fullPage:true});
-  await page.reload();await expect(page.locator('#report-return-chart svg')).toBeVisible();
-  await expect(page.locator('#panel-graphs')).toBeVisible();
-  await expect(page.locator('html')).toHaveAttribute('lang','en');await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
-  await page.click('#language-button');await page.click('#theme-button');
-  await activateTab(page,'portfolio');
-  await expect(page.locator('html')).toHaveAttribute('lang','ru');await expect(page.locator('html')).toHaveAttribute('data-theme','light');
-  await expect(page.locator('#calculate-button')).toHaveText('Рассчитать портфель');
-  await expect(page.locator('#current-title')).toHaveText('Максимум Шарпа');
-  expect(errors).toEqual([]);
-});
-
-test('English Excel roundtrip, uploaded names and translated validation errors work in the data tab',async({page},testInfo)=>{
-  await page.goto('/');await page.click('#language-button');await activateTab(page,'data');
-  const waiting=page.waitForEvent('download');await page.click('#template-button');const download=await waiting;
-  expect(download.suggestedFilename()).toBe('Template_10_indicators.xlsx');
-  const file=testInfo.outputPath('english-template.xlsx');await download.saveAs(file);
-  const book=XLSX.read(await readFile(file),{type:'buffer'});
-  expect(book.SheetNames).toEqual(['Data','Instructions']);
-  const rows=XLSX.utils.sheet_to_json(book.Sheets.Data,{header:1});
-  expect(rows[0].slice(0,3)).toEqual(['Date','CPI','Ruble money supply M2']);
-  rows[0][3]='Мой индикатор';book.Sheets.Data=XLSX.utils.aoa_to_sheet(rows);
-  await page.locator('#file-input').setInputFiles({name:'custom.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(XLSX.write(book,{type:'buffer',bookType:'xlsx'}))});
-  await expect(page.locator('#data-badge')).toHaveText('Your Excel');await expect(page.locator('#message')).not.toHaveClass(/error/);
-  await expect(page.locator('#indicators-table')).toContainText('Мой индикатор');
-  await page.click('#language-button');await expect(page.locator('#indicators-table')).toContainText('Мой индикатор');
-  await page.click('#language-button');
-  await activateTab(page,'comparison');
-  const exporting=page.waitForEvent('download');await page.click('#export-button');const exported=await exporting;
-  const output=testInfo.outputPath('english-results.xlsx');await exported.saveAs(output);
-  const result=XLSX.read(await readFile(output),{type:'buffer'});
-  expect(result.SheetNames).toEqual(['Metrics','Weights','Real capital','Drawdowns','Efficient frontier','Source data','Real returns','Methodology']);
-  const summary=XLSX.utils.sheet_to_json(result.Sheets.Metrics,{header:1});
-  expect(summary[0][0]).toBe('Portfolio');expect(summary[1][0]).toBe('Markowitz');
-  expect(XLSX.utils.sheet_to_json(result.Sheets.Weights,{header:1})[2][0]).toBe('Мой индикатор');
-  await activateTab(page,'data');
-  const bad=XLSX.utils.book_new();XLSX.utils.book_append_sheet(bad,XLSX.utils.aoa_to_sheet([['Date','CPI'],['2020-01-31',100]]),'Data');
-  await page.locator('#file-input').setInputFiles({name:'bad.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(XLSX.write(bad,{type:'buffer',bookType:'xlsx'}))});
-  await expect(page.locator('#message')).toHaveClass(/error/);await expect(page.locator('#message')).toContainText('At least 13');
-  await page.click('#language-button');await expect(page.locator('#message')).toContainText('Нужно минимум 13');
-});
-
-test('Excel upload supports keyboard and file drop while preserving data on invalid files',async({page})=>{
-  await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();await activateTab(page,'data');
-  const frame=page.locator('#upload-frame');
-  for(const key of ['Enter','Space']) {
-    await frame.focus();
-    const chooserPromise=page.waitForEvent('filechooser');
-    await frame.press(key);
-    await (await chooserPromise).setFiles([]);
-  }
-  const invalid=await page.evaluateHandle(()=>{const dt=new DataTransfer();dt.items.add(new File(['invalid'],'prices.csv',{type:'text/csv'}));return dt;});
-  await frame.dispatchEvent('dragenter',{dataTransfer:invalid});
-  await expect(frame).toHaveClass(/dragging/);
-  await frame.dispatchEvent('drop',{dataTransfer:invalid});
-  await expect(frame).not.toHaveClass(/dragging/);
-  await expect(page.locator('#message')).toHaveClass(/error/);
-  await expect(page.locator('#message')).toContainText('Выберите файл .xlsx или .xls.');
-  await expect(page.locator('#data-status')).toHaveText('Учебные данные');
-  await expect(page.locator('#indicators-table tbody tr')).toHaveCount(10);
-  await invalid.dispose();
-  const book=XLSX.utils.book_new();
-  const names=['Рублёвая масса М2',...Array.from({length:9},(_,i)=>'Индикатор '+(i+2))];
-  const rows=Array.from({length:13},(_,i)=>[new Date(Date.UTC(2020,i+1,0)).toISOString().slice(0,10),100,...Array(10).fill(100+i)]);
-  XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['Дата','ИПЦ',...names],...rows]),'Данные');
-  const bytes=Array.from(XLSX.write(book,{type:'buffer',bookType:'xlsx'}));
-  const transfer=await page.evaluateHandle(data=>{const dt=new DataTransfer();dt.items.add(new File([new Uint8Array(data)],'dropped.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return dt;},bytes);
-  await frame.dispatchEvent('dragenter',{dataTransfer:transfer});
-  await frame.dispatchEvent('dragover',{dataTransfer:transfer});
-  await frame.dispatchEvent('drop',{dataTransfer:transfer});
-  await expect(frame).not.toHaveClass(/dragging/);
-  await expect(page.locator('#data-status')).toHaveText('Ваш Excel');
-  await expect(page.locator('#data-badge')).toHaveText('Ваш Excel');
-  await expect(page.locator('#upload-status')).toHaveText('dropped.xlsx');
-  await expect(page.locator('#current-title')).toHaveText('Марковиц');
+  const start=initial.rows[12].date,end=initial.rows.at(-1).date;
+  await page.fill('#comparison-from',start);await page.fill('#comparison-to',end);await page.click('#comparison-period-apply');
   await expect(page.locator('#message')).not.toHaveClass(/error/);
-  await activateTab(page,'portfolio');
-  expect((await chartSeries(page,['equity-chart']))[0][0].data).toHaveLength(13);
-  await transfer.dispose();
-  await activateTab(page,'data');
-  await page.click('#demo-button');
-  await expect(page.locator('#data-status')).toHaveText('Учебные данные');
-  await expect(page.locator('#upload-status')).toHaveText('Перетащите Excel сюда');
+  const downloaded=await download(page,testInfo,'#export-button','official-comparison.xlsx');const book=XLSX.read(downloaded.bytes,{type:'buffer'});
+  const weights=XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1});expect(weights).toHaveLength(10);
+  expect(weights.slice(1).some(row=>/М2/.test(row[0]))).toBeFalsy();
+  for(let i=1;i<weights[0].length;i++)expect(weights.slice(1).reduce((s,row)=>s+row[i],0)).toBeCloseTo(1,8);
+  expect(book.SheetNames).toContain('Инфляция и М2');
+  const source=XLSX.utils.sheet_to_json(book.Sheets['Исходные данные'],{header:1});expect(source[0][2]).toContain('М2');
+  const capital=XLSX.utils.sheet_to_json(book.Sheets['Реальный капитал'],{header:1});expect(capital[1][0]).toBe(start);expect(capital[1].slice(1)).toEqual(Array(5).fill(1e6));
+  const firstId=await page.locator('[data-remove]').first().getAttribute('data-remove');await page.locator('[data-remove="'+firstId+'"]').click();
+  await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);
+  await page.locator('.comparison-library').evaluate(el=>el.open=true);await page.fill('#comparison-set-name','Официальные данные');await page.click('#comparison-set-save');
+  const set=await page.locator('#comparison-set-select').inputValue();await page.reload();await expect(page.locator('#comparison-table tbody tr')).toHaveCount(1);
+  await page.locator('.comparison-library').evaluate(el=>el.open=true);await page.selectOption('#comparison-set-select',set);await page.click('#comparison-set-open');
+  await expect(page.locator('#message')).not.toHaveClass(/error/);await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);
+  await expect(page.locator('#comparison-from')).toHaveValue(start);
 });
 
-test('tabs support arrow keys, Home and End with one active accessible panel',async({page})=>{
-  await page.goto('/');await expect(page.locator('#equity-chart svg')).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveCount(6);
-  for(const name of tabs) {
-    await expect(page.locator('#tab-'+name)).toHaveAttribute('role','tab');
-    await expect(page.locator('#tab-'+name)).toHaveAttribute('aria-controls','panel-'+name);
-    await expect(page.locator('#panel-'+name)).toHaveAttribute('role','tabpanel');
-    await expect(page.locator('#panel-'+name)).toHaveAttribute('aria-labelledby','tab-'+name);
-  }
-  await page.locator('#tab-portfolio').focus();
-  const steps=[['ArrowRight','graphs'],['ArrowRight','comparison'],['ArrowRight','backtest'],['ArrowRight','data'],['ArrowRight','help'],['ArrowRight','portfolio'],['ArrowLeft','help'],['Home','portfolio'],['End','help']];
-  for(const [key,active] of steps) {
-    await page.keyboard.press(key);
-    await expect(page.locator('#tab-'+active)).toBeFocused();
-    for(const name of tabs) {
-      await expect(page.locator('#tab-'+name)).toHaveAttribute('aria-selected',String(name===active));
-      await expect(page.locator('#tab-'+name)).toHaveAttribute('tabindex',name===active?'0':'-1');
-      if(name===active)await expect(page.locator('#panel-'+name)).toBeVisible();
-      else await expect(page.locator('#panel-'+name)).toBeHidden();
-    }
-  }
+test('holdout weights and equal-weight benchmark exclude M2 in charts, tables and Excel',async({page},testInfo)=>{
+  await ready(page);await tab(page,'backtest');await page.click('#backtest-run-button');
+  await expect(page.locator('#backtest-results')).toBeVisible();
+  const weights=await chart(page,'backtest-weights-chart');const categories=weights.xAxis[0].data||weights.yAxis[0].data;
+  expect(categories).toHaveLength(9);expect(categories.some(name=>name.includes('М2'))).toBeFalsy();
+  expect(weights.series.at(-1).data).toEqual(Array(9).fill(100/9));
+  const output=await download(page,testInfo,'#backtest-export-button','official-validation.xlsx');const book=XLSX.read(output.bytes,{type:'buffer'});
+  expect(XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1})).toHaveLength(10);
+  expect(XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1}).slice(1).some(row=>row[0].includes('М2'))).toBeFalsy();
 });
 
-test('guide supports direct links, shortcuts, keyboard, translation and mobile without changing results',async({page},testInfo)=>{
-  const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/#help');
-  const guide=page.locator('#panel-help');
-  await expect(guide).toBeVisible();
-  await expect(page.locator('#tab-help')).toHaveAttribute('aria-selected','true');
-  await expect(page.locator('#expected-income')).not.toHaveText('—');
-  const result=()=>page.evaluate(()=>({
-    income:document.getElementById('expected-income').textContent,
-    indicators:document.querySelector('#indicators-table tbody').textContent,
-    comparison:document.querySelector('#comparison-table tbody').textContent
-  }));
-  const before=await result();
-  for(const target of ['data','portfolio','comparison','backtest']) {
-    if(target==='backtest')await guide.locator('details').filter({has:page.getByText('Зачем нужна «Проверка»',{exact:true})}).locator('summary').click();
-    await guide.locator('[data-open-tab="'+target+'"]').click();
-    await expect(page.locator('#panel-'+target)).toBeVisible();
-    await expect(page).toHaveURL(new RegExp('#'+target+'$'));
-    await activateTab(page,'help');
+test('language, theme, guide and keyboard tabs work on mobile without losing the calculated portfolio',async({page},testInfo)=>{
+  await ready(page);const before=(await chart(page,'weights-chart')).series[0].data.map(p=>p.value);
+  await page.click('#language-button');await page.click('#theme-button');await page.setViewportSize({width:390,height:844});
+  for(const name of ['graphs','data','comparison','backtest','help','portfolio']){
+    await tab(page,name);expect(await page.locator('#panel-'+name).textContent()).not.toMatch(/[А-Яа-яЁё]/);
+    await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   }
-  const topics=guide.locator('details');
-  const metrics=topics.nth(2);
-  await metrics.locator('summary').focus();await page.keyboard.press('Enter');
-  await expect(metrics).toHaveAttribute('open','');
-  await expect(metrics.getByText('Коэффициент Шарпа',{exact:true})).toBeVisible();
-  await page.screenshot({path:testInfo.outputPath('guide-desktop.png'),fullPage:true});
-  for(let i=0;i<await topics.count();i++) {
-    const topic=topics.nth(i);
-    if(!await topic.evaluate(element=>element.open))await topic.locator('summary').click();
-  }
-  await page.click('#language-button');await page.click('#theme-button');
-  await expect(page.locator('#tab-help')).toHaveText('Instructions');
-  expect(await guide.textContent()).not.toMatch(/[А-Яа-яЁё]/);
-  await expect(metrics.getByText('Sharpe ratio',{exact:true})).toBeVisible();
-  for(const width of [390,320]) {
-    await page.setViewportSize({width,height:844});
-    await expectNoOverflow(page);
-  }
-  for(let i=0;i<await topics.count();i++)if(i!==2)await topics.nth(i).locator('summary').click();
-  await page.screenshot({path:testInfo.outputPath('guide-mobile-dark.png'),fullPage:true});
-  await page.click('#language-button');
-  expect(await result()).toEqual(before);
-  expect(errors).toEqual([]);
+  expect((await chart(page,'weights-chart')).series[0].data.map(p=>p.value)).toEqual(before);
+  await page.locator('#tab-portfolio').focus();await page.keyboard.press('End');await expect(page.locator('#tab-help')).toBeFocused();
+  await page.locator('#panel-help details').nth(1).locator('summary').click();await expect(page.locator('#panel-help details').nth(1)).toHaveAttribute('open','');
+  await tab(page,'graphs');await page.screenshot({path:testInfo.outputPath('official-macro-mobile-dark.png'),fullPage:true});
+});
+
+test('an unavailable source at startup leaves calculations disabled and never substitutes generated data',async({page})=>{
+  await page.route('**/data/market-data.json',route=>route.fulfill({status:503,body:'unavailable'}));
+  await page.goto('/');await expect(page.locator('#data-status')).toHaveText('Нет данных');
+  await expect(page.locator('#calculate-button')).toBeDisabled();await expect(page.locator('#save-button')).toBeDisabled();
+  await expect(page.locator('#expected-income')).toHaveText('—');await expect(page.locator('#equity-chart svg')).toHaveCount(0);
+  await tab(page,'data');await expect(page.locator('#online-status')).toHaveClass(/error/);await expect(page.locator('#online-load-button')).toBeEnabled();
+});
+
+test('new source loads reset stale comparisons, and source failures preserve the last successful calculation',async({page})=>{
+  await ready(page);await tab(page,'data');
+  const from='2020-01',to='2025-12';await page.fill('#online-from',from);await page.fill('#online-to',to);
+  await page.route('**/api/market-data?**',route=>route.fulfill({json:selectSnapshotPeriod(snapshot,from,to)}));
+  await page.click('#online-load-button');await expect(page.locator('#online-status')).not.toHaveClass(/error/);
+  await expect(page.locator('#data-info')).toContainText('2020-01-31');
+  const before=await page.locator('#expected-income').textContent();
+  await page.unroute('**/api/market-data?**');await page.route('**/api/market-data?**',route=>route.fulfill({status:502,json:{error:'Источник недоступен'}}));
+  await page.click('#online-load-button');await expect(page.locator('#online-status')).toHaveClass(/error/);
+  await expect(page.locator('#expected-income')).toHaveText(before);await expect(page.locator('#calculate-button')).toBeEnabled();
+});
+
+test('a short published period keeps holdout disabled after recalculating, while macro shortcuts scroll to the source charts',async({page})=>{
+  await ready(page);await tab(page,'data');const from='2025-08',to='2026-08';
+  await page.route('**/api/market-data?**',route=>route.fulfill({json:selectSnapshotPeriod(snapshot,from,to)}));
+  await page.fill('#online-from',from);await page.fill('#online-to',to);await page.click('#online-load-button');
+  await expect(page.locator('#online-load-button')).toBeEnabled();await expect(page.locator('#data-info')).toContainText('13');
+  await expect(page.locator('#backtest-run-button')).toBeDisabled();await tab(page,'portfolio');await page.click('#calculate-button');await expect(page.locator('#backtest-run-button')).toBeDisabled();
+  await tab(page,'data');await page.locator('#panel-data [data-scroll-target="macro-summary"]').click();await expect(page.locator('#panel-graphs')).toBeVisible();
+  await expect.poll(()=>page.locator('#macro-summary').evaluate(el=>el.getBoundingClientRect().top>=0&&el.getBoundingClientRect().bottom<=innerHeight)).toBeTruthy();
+});
+
+test('English Excel reports translate asset names and keep M2 only in source and macro sheets',async({page},testInfo)=>{
+  await ready(page);await page.click('#language-button');await tab(page,'comparison');
+  const downloaded=await download(page,testInfo,'#export-button','english-official.xlsx'),book=XLSX.read(downloaded.bytes,{type:'buffer'});
+  const weights=XLSX.utils.sheet_to_json(book.Sheets.Weights,{header:1});expect(weights).toHaveLength(10);
+  expect(JSON.stringify(weights)).not.toMatch(/[А-Яа-яЁё]/);expect(JSON.stringify(weights)).not.toContain('M2');
+  expect(book.SheetNames).toContain('Inflation and M2');expect(book.SheetNames).toContain('Sources');
+  const source=XLSX.utils.sheet_to_json(book.Sheets['Source data'],{header:1});expect(source[0][2]).toContain('M2');expect(JSON.stringify(source[0])).not.toMatch(/[А-Яа-яЁё]/);
 });

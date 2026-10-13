@@ -360,3 +360,12 @@ dialog::backdrop { background: #16151380; backdrop-filter: blur(3px); }
   .guide-steps { gap: 20px; }
   .guide-steps li + li { padding-top: 20px; border-top: 1px solid var(--rule); }
 }
+
+.macro-charts { margin-bottom: 24px; }
+.macro-explanation { margin-bottom: 20px; }
+.macro-explanation h3 { margin-top: 0; }
+.macro-explanation p { color: var(--ink-2); font-size: 13px; }
+
+.macro-stats { margin-top: 24px; }
+
+#macro-summary, #report-comparison { scroll-margin-top: 90px; }

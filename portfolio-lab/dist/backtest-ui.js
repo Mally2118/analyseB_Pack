@@ -6,7 +6,7 @@ const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const percent=value=>Number.isFinite(value)?new Intl.NumberFormat(locale(),{style:'percent',minimumFractionDigits:2,maximumFractionDigits:2}).format(value):'—';
 const number=value=>new Intl.NumberFormat(locale(),{maximumFractionDigits:0}).format(value);
 const money=value=>number(value)+' ₽';
-const modes={markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность',equal:'Равные доли — по 10%'};
+const modes={markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность',equal:'Равные доли — по 1/9'};
 const labels={'backtest-return-chart':'Доходность на проверке','backtest-drawdown-chart':'Просадки на проверке','backtest-weights-chart':'Веса, рассчитанные на обучении'};
 
 export function createBacktestView(getState) {
@@ -25,7 +25,7 @@ export function createBacktestView(getState) {
   }
   function sync() {
     const state=getState();if(!state?.data)return;
-    const changed=!lastState||['data','frequency','cash','capital','nominalRf'].some(key=>state[key]!==lastState[key]);
+    const changed=!lastState||['data','frequency','capital','nominalRf'].some(key=>state[key]!==lastState[key]);
     if(changed) {
       result=null;$('backtest-results').hidden=true;$('backtest-table').querySelector('tbody').replaceChildren();$('backtest-export-button').disabled=true;lastStatus=null;$('backtest-status').hidden=true;
       const rows=state.data.rows,ready=rows.length>=25;
@@ -64,7 +64,7 @@ export function createBacktestView(getState) {
       draw(id,{...base,aria:{enabled:true,label:{description:t(labels[id])}},tooltip:{...base.tooltip,formatter:items=>escape(items[0]?.axisValue??'')+items.map(item=>'<div>'+escape(item.seriesName)+': <b>'+escape(percent(item.value/100))+'</b></div>').join('')},grid:{left:narrow?48:62,right:15,top:52,bottom:55},xAxis:{type:'category',boundaryGap:false,data:result.testDates,axisLabel:{color:p.muted,hideOverlap:true,formatter:date=>date.slice(0,7)},axisLine:{lineStyle:{color:p.line}}},yAxis:{type:'value',axisLabel:{color:p.muted,formatter:value=>number(value)+'%'},splitLine:{lineStyle:{color:p.line}}},dataZoom:[{type:'inside'},{type:'slider',height:14,bottom:5,borderColor:p.line}],series:ps.map((portfolio,index)=>({type:'line',name:name(portfolio),symbol:'none',data:drawdown?portfolio.testStats.drawdown.map(value=>value*100):portfolio.testStats.wealth.map(value=>(value-1)*100),lineStyle:{width:2,type:portfolio.mode==='equal'?'dashed':'solid'},itemStyle:{color:p.colors[index]}}))});
     }
     const horizontal=$('backtest-weights-chart').clientWidth<520;
-    const categories={type:'category',data:result.trainModel.names.map(name=>lastState.data.demo||lastState.data.official?t(name):name),axisLabel:{color:p.muted,interval:0,rotate:horizontal?0:25,fontSize:10,formatter:value=>value.length>17?value.slice(0,16)+'…':value}};
+    const categories={type:'category',data:result.trainModel.names.map(name=>t(name)),axisLabel:{color:p.muted,interval:0,rotate:horizontal?0:25,fontSize:10,formatter:value=>value.length>17?value.slice(0,16)+'…':value}};
     const values={type:'value',axisLabel:{color:p.muted,formatter:value=>number(value)+'%'},splitLine:{lineStyle:{color:p.line}}};
     draw('backtest-weights-chart',{...base,aria:{enabled:true,label:{description:t(labels['backtest-weights-chart'])}},grid:{left:horizontal?120:48,right:15,top:52,bottom:horizontal?35:82},xAxis:horizontal?values:categories,yAxis:horizontal?categories:values,tooltip:{...base.tooltip,valueFormatter:value=>percent(value/100)},series:ps.map(portfolio=>({type:'bar',name:name(portfolio),data:portfolio.weights.map(value=>value*100),barMaxWidth:18}))});
   }
@@ -78,7 +78,7 @@ export function createBacktestView(getState) {
     $('backtest-capital').textContent=money(result.capital);$('backtest-rf').textContent=percent(result.rf);
     $('backtest-table').querySelector('tbody').innerHTML=portfolios().map(portfolio=>{
       const s=portfolio.testStats;
-      return '<tr><td>'+escape(name(portfolio))+'</td><td>'+percent(portfolio.weights[0])+'</td><td>'+percent(portfolio.trainingStats.expectedReturn)+'</td><td>'+percent(s.realizedReturn)+'</td><td>'+percent(s.totalReturn)+'</td><td>'+percent(s.cagr)+'</td><td>'+percent(s.risk)+'</td><td>'+(s.sharpe===null?t('Не определён'):new Intl.NumberFormat(locale(),{maximumFractionDigits:2}).format(s.sharpe))+'</td><td>'+percent(s.maxDrawdown)+'</td><td>'+(s.recoveryIncomplete?'≥ ':'')+number(s.maxRecovery)+' '+t('дн.')+'</td><td>'+money(s.finalCapital)+'</td></tr>';
+      return '<tr><td>'+escape(name(portfolio))+'</td><td>'+percent(portfolio.trainingStats.expectedReturn)+'</td><td>'+percent(s.realizedReturn)+'</td><td>'+percent(s.totalReturn)+'</td><td>'+percent(s.cagr)+'</td><td>'+percent(s.risk)+'</td><td>'+(s.sharpe===null?t('Не определён'):new Intl.NumberFormat(locale(),{maximumFractionDigits:2}).format(s.sharpe))+'</td><td>'+percent(s.maxDrawdown)+'</td><td>'+(s.recoveryIncomplete?'≥ ':'')+number(s.maxRecovery)+' '+t('дн.')+'</td><td>'+money(s.finalCapital)+'</td></tr>';
     }).join('');
     if(result.errors.length&&lastStatus?.key==='Проверка готова. Веса рассчитаны только на обучающем периоде.') {
       const explanation=result.errors.map(error=>t(modes[error.mode])+': '+translateError(error.message)).join(' ');
@@ -99,11 +99,11 @@ export function createBacktestView(getState) {
     if(!result)return;
     const ps=portfolios(),book=XLSX.utils.book_new(),add=(rows,title)=>XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(rows),t(title));
     add([[t('Портфель'),t('Доходность на обучении / год'),t('Фактическая средняя доходность / год'),t('Итоговая доходность'),'CAGR',t('Волатильность'),t('Шарп'),t('Макс. просадка'),t('Капитал на конец периода')],...ps.map(portfolio=>{const s=portfolio.testStats;return [name(portfolio),portfolio.trainingStats.expectedReturn,s.realizedReturn,s.totalReturn,s.cagr,s.risk,s.sharpe,s.maxDrawdown,s.finalCapital];})], 'Показатели');
-    add([[t('Индикатор'),...ps.map(name)],...result.trainModel.names.map((value,index)=>[lastState.data.demo?t(value):value,...ps.map(portfolio=>portfolio.weights[index])])],'Веса');
+    add([[t('Индикатор'),...ps.map(name)],...result.trainModel.names.map((value,index)=>[t(value),...ps.map(portfolio=>portfolio.weights[index])])],'Веса');
     add([[t('Дата'),...ps.map(name)],...result.testDates.map((date,index)=>[date,...ps.map(portfolio=>portfolio.testStats.wealth[index]*result.capital)])],'Проверочный капитал');
     add([[t('Дата'),...ps.map(name)],...result.testDates.map((date,index)=>[date,...ps.map(portfolio=>portfolio.testStats.drawdown[index])])],'Просадки');
     const boundary=lastState.data.rows.findIndex(row=>row.date===result.splitDate),rows=lastState.data.rows;
-    const dataRows=subset=>[[t('Дата'),t('ИПЦ'),...lastState.data.names.map(name=>lastState.data.demo?t(name):name)],...subset.map(row=>[row.date,row.cpi,...row.values])];
+    const dataRows=subset=>[[t('Дата'),t('ИПЦ'),...lastState.data.names.map(name=>t(name))],...subset.map(row=>[row.date,row.cpi,...row.values])];
     add(dataRows(rows.slice(0,boundary+1)),'Обучающие данные');add(dataRows(rows.slice(boundary)),'Проверочные данные');
     add([[t('Параметр'),t('Значение')],[t('Источник'),lastState.data.source],[t('Последняя дата обучения'),result.splitDate],[t('Начальный капитал, ₽'),result.capital],[t('Номинальная ставка'),result.nominalRf],[t('Реальная безрисковая ставка'),result.rf],[t('Периодов в год'),lastState.frequency],[t('Ребалансировка'),t('Каждый период, без комиссий и налогов')],[t('Методика'),t('Веса и ставка определены только на обучении; показатели результата измерены на проверке.')],...Object.entries(result.settings),...result.errors.map(error=>[t(modes[error.mode]),translateError(error.message)])],'Методика');
     XLSX.writeFile(book,t('Проверка_портфелей.xlsx'),{compression:true});

@@ -1,9 +1,10 @@
+import {officialData} from './fixtures.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {demoData,estimate,createOptimizer,metrics} from '../dist/engine.js';
+import {estimate,createOptimizer,metrics} from '../dist/engine.js';
 import {commonDates,evaluatePortfolio,comparisonStat,metricComparison,serializeComparison,restoreComparison,readComparisonSets,saveComparisonSet,deleteComparisonSet} from '../dist/comparison.js';
 
-const data=demoData(),model=estimate(data),optimizer=createOptimizer(model),nominalRf=.08,rf=1.08/(1+model.inflation)-1;
+const data=officialData(),model=estimate(data),optimizer=createOptimizer(model),nominalRf=.08,rf=1.08/(1+model.inflation)-1;
 const settings={rf,nominalRf,lambda:3,targetReturn:.1,targetRisk:.2};
 const current={...optimizer.solve('sharpe',settings),id:'current',mode:'sharpe',name:'Максимум Шарпа',settings,visible:true,compared:true};
 const context={data,model,rf,nominalRf,capital:1e6};
@@ -53,7 +54,7 @@ test('saved state roundtrip restores independent datasets, visibility, removed c
 });
 
 test('restoration rejects corrupt weights, invalid sources, duplicate ids, bad settings, sequence and unsupported versions',()=>{
-  for(const mutate of [p=>p.current.weights[0]=-1,p=>p.current.weights.pop(),p=>p.current.source=50,p=>p.saved=[p.current],p=>p.current.settings.nominalRf=-1,p=>p.sequence=-1,p=>p.version=2,p=>p.sources[0].rows[1].date=p.sources[0].rows[0].date]){
+  for(const mutate of [p=>p.current.weights[0]=-1,p=>p.current.weights.pop(),p=>p.current.source=50,p=>p.saved=[p.current],p=>p.current.settings.nominalRf=-1,p=>p.sequence=-1,p=>p.version=1,p=>p.sources[0].rows[1].date=p.sources[0].rows[0].date]){
     const packed=JSON.parse(JSON.stringify(serializeComparison(state())));mutate(packed);assert.throws(()=>restoreComparison(packed));
   }
 });
@@ -72,4 +73,14 @@ test('named sets survive rereads, same names replace a set, deletion is persiste
   deleteComparisonSet(storage,readComparisonSets(storage),first.id);assert.equal(readComparisonSets(storage).length,1);
   assert.throws(()=>saveComparisonSet(storage,[],'',payload),/название/);
   const ten=Array.from({length:10},(_,i)=>({id:String(i),name:String(i)}));assert.throws(()=>saveComparisonSet(storage,ten,'Новый',payload),/10 наборов/);
+});
+
+test('v2 rejects generated sources and cleans only generated legacy sets while preserving official legacy data',async()=>{
+  const {discardGeneratedComparisonSets}=await import('../dist/comparison.js');
+  const payload=serializeComparison(state());payload.sources[0].demo=true;
+  assert.throws(()=>restoreComparison(payload),/повреждён/);
+  const storage=memoryStorage(),key='portfolio-lab.comparison-sets.v1';
+  const genuine={name:'Источники',payload:{sources:[{demo:false}]}};
+  storage.setItem(key,JSON.stringify([{name:'Сгенерированные',payload:{sources:[{demo:true}]}},genuine]));
+  discardGeneratedComparisonSets(storage);assert.deepEqual(JSON.parse(storage.getItem(key)),[genuine]);
 });

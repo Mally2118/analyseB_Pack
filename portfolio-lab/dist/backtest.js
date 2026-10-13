@@ -9,7 +9,7 @@ const MIN_PERIODS=12;
  * Constant target weights imply rebalancing every observation period, without fees.
  */
 export function runBacktest(data,{
-  frequency=12,cash=false,capital=1000000,nominalRf=.08,splitDate,
+  frequency=12,capital=1000000,nominalRf=.08,splitDate,
   settings={},modes=BACKTEST_MODES
 }={}) {
   if(!Array.isArray(data?.names)||!Array.isArray(data?.rows)||data.rows.some(row=>!Array.isArray(row?.values))) {
@@ -17,7 +17,6 @@ export function runBacktest(data,{
   }
   if(!Number.isFinite(capital)||capital<=0)throw Error('Капитал должен быть положительным конечным числом.');
   if(!Number.isFinite(nominalRf)||nominalRf<=-1)throw Error('Безрисковая ставка должна быть конечным числом больше −100%.');
-  if(typeof cash!=='boolean')throw Error('Режим рублёвого остатка должен быть логическим значением.');
   if(!settings||typeof settings!=='object'||Array.isArray(settings))throw Error('Проверьте параметры критериев.');
   if(!Array.isArray(modes)||!modes.length||new Set(modes).size!==modes.length||modes.some(mode=>!BACKTEST_MODES.includes(mode))) {
     throw Error('Выберите один или несколько различных критериев оптимизации.');
@@ -36,7 +35,7 @@ export function runBacktest(data,{
   if(validated.rows.length-1-boundary<MIN_PERIODS)throw Error('После даты разделения нужны минимум 12 периодов доходности для проверки.');
   const trainData={...validated,rows:validated.rows.slice(0,boundary+1)};
   const testData={...validated,rows:validated.rows.slice(boundary)};
-  const trainModel=estimate(trainData,frequency,cash),testModel=estimate(testData,frequency,cash);
+  const trainModel=estimate(trainData,frequency),testModel=estimate(testData,frequency);
   // This annual rate is known at the boundary and never uses held-out CPI.
   const rf=(1+nominalRf)/(1+trainModel.inflation)-1;
   if(!Number.isFinite(rf)||rf<=-1)throw Error('Не удалось скорректировать ставку на инфляцию обучающего периода.');
@@ -56,7 +55,7 @@ export function runBacktest(data,{
       errors.push({mode,message:error.message});
     }
   }
-  const weights=Array(validated.names.length).fill(1/validated.names.length);
+  const weights=Array(trainModel.names.length).fill(1/trainModel.names.length);
   const benchmark={mode:'equal',weights,trainingStats:stats(trainModel,weights),testStats:stats(testModel,weights)};
   return {
     splitDate:validated.rows[boundary].date,requestedSplitDate,

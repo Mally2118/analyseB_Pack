@@ -4,7 +4,7 @@ const CACHE_MS = 5 * 60 * 1000;
 const snapshots = new WeakMap();
 const INVALID_DATA = 'Источник вернул некорректные данные. Предыдущая выборка сохранена.';
 const INVALID_SNAPSHOT = 'Подготовленная статистика повреждена. Повторите загрузку позже.';
-const SNAPSHOT_UNAVAILABLE = 'Не удалось загрузить подготовленную статистику. Повторите загрузку или используйте Excel.';
+const SNAPSHOT_UNAVAILABLE = 'Не удалось загрузить подготовленную статистику. Повторите загрузку позже.';
 const API_UNAVAILABLE = 'Не удалось получить официальные данные. Попробуйте другой период.';
 const monthIndex = month => Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
 const monthName = index => `${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`;

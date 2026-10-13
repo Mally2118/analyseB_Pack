@@ -1,5 +1,4 @@
 import {parseTable,estimate,createOptimizer,metrics} from './engine.js';
-import {exampleProfiles} from './example-portfolios.js';
 
 export const comparisonMetrics=[
   ['expectedIncome',1,'money'],['expectedReturn',1,'percent'],['risk',-1,'percent'],['sharpe',1,'number'],
@@ -7,7 +6,17 @@ export const comparisonMetrics=[
   ['maxRecovery',-1,'days'],['longestRecovery',-1,'days'],['openRecovery',-1,'days']
 ];
 const periodCache=new WeakMap();
-const libraryKey='portfolio-lab.comparison-sets.v1';
+const libraryKey='portfolio-lab.comparison-sets.v2';
+
+export function discardGeneratedComparisonSets(storage) {
+  const key='portfolio-lab.comparison-sets.v1';
+  try {
+    const entries=JSON.parse(storage.getItem(key)||'[]');
+    if(!Array.isArray(entries))return;
+    const retained=entries.filter(entry=>!entry?.payload?.sources?.some(source=>source.demo===true));
+    if(retained.length!==entries.length)storage.setItem(key,JSON.stringify(retained));
+  }catch{/* Optional browser storage; old formats are never loaded by v2. */}
+}
 
 export function commonDates(portfolios,context) {
   if(!portfolios.length)return [];
@@ -24,10 +33,10 @@ export function evaluatePortfolio(portfolio,context,period=null) {
   if(!dates.includes(period.from)||!dates.includes(period.to)||period.from>=period.to)throw Error('Выберите начальную и конечную даты, доступные всем портфелям.');
   const rows=source.rows.filter(row=>row.date>=period.from&&row.date<=period.to);
   if(rows.length<13)throw Error('В общем периоде нужно минимум 13 наблюдений для каждого портфеля.');
-  const cash=sourceModel.names[0]!==source.names[0],key=`${sourceModel.frequency}:${cash}:${period.from}:${period.to}`;
+  const key=`${sourceModel.frequency}:${period.from}:${period.to}`;
   let cache=periodCache.get(source);if(!cache){cache=new Map();periodCache.set(source,cache);}
   let snapshot=cache.get(key);
-  if(!snapshot){const data={...source,rows},model=estimate(data,sourceModel.frequency,cash);snapshot={data,model};cache.set(key,snapshot);}
+  if(!snapshot){const data={...source,rows},model=estimate(data,sourceModel.frequency);snapshot={data,model};cache.set(key,snapshot);}
   const nominalRf=portfolio.snapshot?portfolio.settings.nominalRf:context.nominalRf;
   const rf=(1+nominalRf)/(1+snapshot.model.inflation)-1;
   return {portfolio:{...portfolio,settings:{...portfolio.settings,rf},snapshot},model:snapshot.model,rf};
@@ -62,29 +71,29 @@ export function serializeComparison(state) {
     const data=portfolio.snapshot?.data||state.data;
     if(!sourceIndex.has(data)){sourceIndex.set(data,sources.length);sources.push(data);}
     const model=portfolio.snapshot?.model||state.model;
-    return {id:portfolio.id,name:portfolio.name,mode:portfolio.mode,weights:[...portfolio.weights],settings:{...portfolio.settings},ordinal:portfolio.ordinal,initial:portfolio.initial,profile:portfolio.profile,visible:portfolio.visible,compared:portfolio.compared,snapshot:!!portfolio.snapshot,source:sourceIndex.get(data),frequency:model.frequency,cash:model.names[0]!==data.names[0]};
+    return {id:portfolio.id,name:portfolio.name,mode:portfolio.mode,weights:[...portfolio.weights],settings:{...portfolio.settings},ordinal:portfolio.ordinal,initial:portfolio.initial,profile:portfolio.profile,visible:portfolio.visible,compared:portfolio.compared,snapshot:!!portfolio.snapshot,source:sourceIndex.get(data),frequency:model.frequency};
   }
   const current=pack(state.current),saved=state.saved.map(pack);
-  return {version:1,sources,current,saved,capital:state.capital,sequence:state.sequence,period:state.period,baselineId:state.baselineId,selectedReportId:state.selectedReportId,reportView:state.reportView,highlight:state.highlight};
+  return {version:2,sources,current,saved,capital:state.capital,sequence:state.sequence,period:state.period,baselineId:state.baselineId,selectedReportId:state.selectedReportId,reportView:state.reportView,highlight:state.highlight};
 }
 
 export function restoreComparison(payload) {
   const invalid=()=>{throw Error('Сохранённый набор повреждён. Текущее сравнение сохранено.');};
-  if(payload?.version!==1||!Array.isArray(payload.sources)||payload.sources.length<1||payload.sources.length>9||!Array.isArray(payload.saved)||payload.saved.length>8||!Number.isFinite(payload.capital)||payload.capital<=0||payload.capital>1e15)invalid();
+  if(payload?.version!==2||!Array.isArray(payload.sources)||payload.sources.length<1||payload.sources.length>9||!Array.isArray(payload.saved)||payload.saved.length>8||!Number.isFinite(payload.capital)||payload.capital<=0||payload.capital>1e15)invalid();
   const sources=payload.sources.map(source=>{
-    if(!source||!Array.isArray(source.names)||!Array.isArray(source.rows)||source.rows.length>5000||typeof source.source!=='string')invalid();
+    if(!source||source.demo!==false||source.official!==true||!Array.isArray(source.names)||!Array.isArray(source.rows)||source.rows.length>5000||typeof source.source!=='string')invalid();
     const parsed=parseTable([['Дата','ИПЦ',...source.names],...source.rows.map(row=>[row.date,row.cpi,...row.values])]);
-    return {...parsed,source:source.source,demo:source.demo===true,official:source.official===true};
+    return {...source,...parsed,source:source.source,demo:false,official:true};
   });
   const contexts=new Map(),ids=new Set();
   function unpack(portfolio){
-    if(!portfolio||!/^current$|^p\d+$/.test(portfolio.id)||ids.has(portfolio.id)||!['markowitz','sharpe','risk','return'].includes(portfolio.mode)||!Array.isArray(portfolio.weights)||portfolio.weights.length!==10||portfolio.weights.some(w=>!Number.isFinite(w)||w<0)||Math.abs(portfolio.weights.reduce((a,b)=>a+b,0)-1)>1e-7||!Number.isInteger(portfolio.source)||!sources[portfolio.source]||![1,12,252].includes(portfolio.frequency)||typeof portfolio.cash!=='boolean'||typeof portfolio.name!=='string'||portfolio.name.length>160)invalid();
+    if(!portfolio||!/^current$|^p\d+$/.test(portfolio.id)||ids.has(portfolio.id)||!['markowitz','sharpe','risk','return'].includes(portfolio.mode)||!Array.isArray(portfolio.weights)||portfolio.weights.length!==9||portfolio.weights.some(w=>!Number.isFinite(w)||w<0)||Math.abs(portfolio.weights.reduce((a,b)=>a+b,0)-1)>1e-7||!Number.isInteger(portfolio.source)||!sources[portfolio.source]||portfolio.frequency!==12||typeof portfolio.name!=='string'||portfolio.name.length>160)invalid();
     if(!portfolio.settings||Object.values(portfolio.settings).some(value=>!Number.isFinite(value))||!Number.isFinite(portfolio.settings.nominalRf)||portfolio.settings.nominalRf<=-1)invalid();
-    if(portfolio.profile&&!exampleProfiles.includes(portfolio.profile))invalid();
+    if(portfolio.profile)invalid();
     if(portfolio.ordinal!==undefined&&(!Number.isInteger(portfolio.ordinal)||portfolio.ordinal<1))invalid();
     ids.add(portfolio.id);
-    const key=`${portfolio.source}:${portfolio.frequency}:${portfolio.cash}`;
-    if(!contexts.has(key)){const data=sources[portfolio.source],model=estimate(data,portfolio.frequency,portfolio.cash),optimizer=createOptimizer(model);contexts.set(key,{data,model,optimizer,frontier:optimizer.frontier});}
+    const key=`${portfolio.source}:${portfolio.frequency}`;
+    if(!contexts.has(key)){const data=sources[portfolio.source],model=estimate(data,portfolio.frequency),optimizer=createOptimizer(model);contexts.set(key,{data,model,optimizer,frontier:optimizer.frontier});}
     const context=contexts.get(key),rf=(1+portfolio.settings.nominalRf)/(1+context.model.inflation)-1;
     const restored={...portfolio,weights:[...portfolio.weights],settings:{...portfolio.settings,rf},visible:portfolio.visible!==false,compared:portfolio.compared!==false};
     delete restored.source;delete restored.frequency;delete restored.cash;delete restored.snapshot;
@@ -103,13 +112,13 @@ export function restoreComparison(payload) {
   const context={...main.context,capital:payload.capital,nominalRf:main.portfolio.settings.nominalRf,rf:main.portfolio.settings.rf};
   const portfolios=[main.portfolio,...saved].filter(p=>p.compared!==false);
   if(period)portfolios.forEach(p=>comparisonStat(p,context,period));
-  return {...context,current:main.portfolio,saved,sequence:payload.sequence,period,baselineId:ids.has(payload.baselineId)?payload.baselineId:'current',selectedReportId:ids.has(payload.selectedReportId)?payload.selectedReportId:'current',reportView:['return','wealth','drawdown','recovery','frontier','weights'].includes(payload.reportView)?payload.reportView:'return',signature:`${main.context.model.frequency}:${payload.current.cash}`,highlight:payload.highlight!==false};
+  return {...context,current:main.portfolio,saved,sequence:payload.sequence,period,baselineId:ids.has(payload.baselineId)?payload.baselineId:'current',selectedReportId:ids.has(payload.selectedReportId)?payload.selectedReportId:'current',reportView:['return','wealth','drawdown','recovery','frontier','weights'].includes(payload.reportView)?payload.reportView:'return',signature:`${main.context.model.frequency}`,highlight:payload.highlight!==false};
 }
 
 export function readComparisonSets(storage) {
   const raw=storage.getItem(libraryKey);if(!raw)return [];
   const entries=JSON.parse(raw);
-  if(!Array.isArray(entries)||entries.length>10||entries.some(entry=>!entry||typeof entry.id!=='string'||typeof entry.name!=='string'||!entry.name.trim()||entry.name.length>80||typeof entry.date!=='string'||!Number.isFinite(Date.parse(entry.date))||entry.payload?.version!==1))throw Error('Не удалось прочитать сохранённые наборы.');
+  if(!Array.isArray(entries)||entries.length>10||entries.some(entry=>!entry||typeof entry.id!=='string'||typeof entry.name!=='string'||!entry.name.trim()||entry.name.length>80||typeof entry.date!=='string'||!Number.isFinite(Date.parse(entry.date))||entry.payload?.version!==2))throw Error('Не удалось прочитать сохранённые наборы.');
   return entries;
 }
 

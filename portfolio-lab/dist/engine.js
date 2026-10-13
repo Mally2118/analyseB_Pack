@@ -3,27 +3,6 @@ export const mean = a => a.reduce((s,v)=>s+v,0)/a.length;
 export const variance = (w,c) => dot(w,c.map(row=>dot(row,w)));
 const day = 86400000;
 
-export function demoData() {
-  let seed=62841;
-  const rand=()=>{seed=(1664525*seed+1013904223)>>>0;return (seed+.5)/4294967296;};
-  const normal=()=>Math.sqrt(-2*Math.log(rand()))*Math.cos(2*Math.PI*rand());
-  const names=['Рублёвая масса М2','Золото','Доллар США','Евро','Юань','Индекс Мосбиржи','ОФЗ / RGBITR','Индекс недвижимости','Серебро','Индекс S&P 500'];
-  let values=[58000,3200,64,71,9.2,3000,100,100,38,190000],cpi=100;
-  const rows=[];
-  for(let t=0;t<85;t++) {
-    const date=new Date(Date.UTC(2019+Math.floor(t/12),t%12+1,0)).toISOString().slice(0,10);
-    if(t) {
-      const shock=t===38?.15:t===39?-.08:t===50?-.06:0;
-      const fx=.018*normal()+shock, equity=.038*normal()-shock*1.3;
-      const rates=[.009+.005*normal(),.011+.5*fx+.031*normal(),.004+fx,.003+.92*fx+.01*normal(),.003+.75*fx+.008*normal(),.012+equity,.007+.009*normal()-shock*.12,.008+.008*normal()-shock*.08,.009+.6*fx+.045*normal(),.012+.6*fx+.034*normal()];
-      values=values.map((v,i)=>v*(1+rates[i]));
-      cpi*=1+Math.max(.0003,.004+.0015*normal()+(t===38?.025:0));
-    }
-    rows.push({date,cpi,values:[...values]});
-  }
-  return {names,rows,source:'Учебный пример · синтетические данные',demo:true};
-}
-
 export function parseDate(value) {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0,10);
   if(typeof value==='number' && value>1 && value<100000) return new Date(Date.UTC(1899,11,30)+Math.floor(value)*day).toISOString().slice(0,10);
@@ -58,7 +37,7 @@ export function parseTable(table) {
   return {names,rows,demo:false,source:'Загруженный Excel'};
 }
 
-export function estimate(data,frequency=12,cash=false) {
+export function estimate(data,frequency=12) {
   const {rows}=data;
   if(rows.length<13) throw Error('Нужно не менее 13 наблюдений.');
   if(![1,12,252].includes(frequency)) throw Error('Неизвестная периодичность.');
@@ -68,9 +47,13 @@ export function estimate(data,frequency=12,cash=false) {
   }
   if(frequency===1) for(let i=1;i<rows.length;i++) if(new Date(rows[i].date).getUTCFullYear()-new Date(rows[i-1].date).getUTCFullYear()!==1) throw Error('Для годовых данных нужны последовательные годы.');
   if(frequency===252) for(let i=1;i<rows.length;i++) if((new Date(rows[i].date)-new Date(rows[i-1].date))/day>7) throw Error('В дневных данных обнаружен разрыв более 7 дней. Проверьте периодичность.');
-  const returns=rows.slice(1).map((row,t)=>row.values.map((value,j)=>((cash&&j===0?1:value/rows[t].values[j])/(row.cpi/rows[t].cpi))-1));
+  // M2 is a macroeconomic level, never an investable return or portfolio weight.
+  if(!/М2|M2/i.test(data.names[0]))throw Error('Первый исходный ряд должен быть М2; он исключается из инвестиционного портфеля.');
+  const sourceIndices=Array.from({length:data.names.length-1},(_,i)=>i+1);
+  const nominalReturns=rows.slice(1).map((row,t)=>sourceIndices.map(j=>row.values[j]/rows[t].values[j]-1));
+  const returns=nominalReturns.map((row,t)=>row.map(value=>(1+value)/(rows[t+1].cpi/rows[t].cpi)-1));
   if(returns.some(r=>r.some(v=>!Number.isFinite(v)||v<=-1)))throw Error('Изменения уровней слишком велики для устойчивого расчёта. Проверьте числа и единицы измерения.');
-  const means=Array.from({length:10},(_,j)=>mean(returns.map(r=>r[j])));
+  const means=sourceIndices.map((_,j)=>mean(returns.map(r=>r[j])));
   const mu=means.map(v=>v*frequency);
   const cov=means.map((_,i)=>means.map((__,j)=>returns.reduce((s,r)=>s+(r[i]-means[i])*(r[j]-means[j]),0)/(returns.length-1)*frequency));
   if(mu.some(v=>!Number.isFinite(v))||cov.some(r=>r.some(v=>!Number.isFinite(v))))throw Error('Не удалось оценить ковариацию: проверьте масштаб чисел.');
@@ -78,7 +61,7 @@ export function estimate(data,frequency=12,cash=false) {
   const ridge=Math.max(1e-12,Math.max(...cov.map((r,i)=>r[i]))*1e-10);
   const stabilized=cov.map((r,i)=>r.map((v,j)=>v+(i===j?ridge:0)));
   const inflation=Math.pow(rows.at(-1).cpi/rows[0].cpi,frequency/(rows.length-1))-1;
-  return {mu,cov,stabilized,returns,frequency,inflation,dates:rows.map(r=>r.date),names:data.names.map((n,i)=>cash&&i===0?'Рублёвый остаток':n)};
+  return {mu,cov,stabilized,returns,nominalReturns,sourceIndices,frequency,inflation,dates:rows.map(r=>r.date),names:sourceIndices.map(i=>data.names[i])};
 }
 
 function inverse(a) {
@@ -156,7 +139,7 @@ export function createOptimizer(model) {
 }
 
 export function metrics(model,weights,rf=0,capital=1000000) {
-  if(weights.length!==10||weights.some(v=>!Number.isFinite(v)||v<0)||Math.abs(weights.reduce((s,v)=>s+v,0)-1)>1e-6) throw Error('Веса должны быть неотрицательными и в сумме равняться 100%.');
+  if(weights.length!==model.mu.length||weights.some(v=>!Number.isFinite(v)||v<0)||Math.abs(weights.reduce((s,v)=>s+v,0)-1)>1e-6) throw Error('Веса должны быть неотрицательными и в сумме равняться 100%.');
   if(!Number.isFinite(capital)||capital<=0||!Number.isFinite(rf))throw Error('Капитал и ставка должны быть конечными числами; капитал должен быть больше нуля.');
   const r=model.returns.map(row=>dot(row,weights));
   const wealth=[1];r.forEach(v=>wealth.push(wealth.at(-1)*(1+v)));

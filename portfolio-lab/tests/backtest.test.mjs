@@ -1,10 +1,11 @@
+import {officialData} from './fixtures.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {demoData,estimate,createOptimizer,dot} from '../dist/engine.js';
+import {estimate,createOptimizer,dot} from '../dist/engine.js';
 import {runBacktest} from '../dist/backtest.js';
 
 const close=(actual,expected,tolerance=1e-9)=>assert.ok(Math.abs(actual-expected)<tolerance,`${actual} != ${expected}`);
-const demo=demoData(),splitDate=demo.rows[59].date;
+const demo=officialData(),splitDate=demo.rows[59].date;
 const options={splitDate,nominalRf:.08,capital:1000000,settings:{lambda:3,targetReturn:.08,targetRisk:.20}};
 
 test('holdout keeps the boundary observation and every return exactly once',()=>{
@@ -51,9 +52,9 @@ test('held-out paths use training weights, period CPI and the same training rate
     close(portfolio.testStats.realizedIncome,portfolio.testStats.realizedReturn*options.capital,1e-6);
     close(portfolio.testStats.sharpe,(portfolio.testStats.realizedReturn-result.rf)/portfolio.testStats.risk);
   }
-  close(result.testModel.returns[0][0],demo.rows[60].values[0]/demo.rows[59].values[0]/(demo.rows[60].cpi/demo.rows[59].cpi)-1);
-  assert.deepEqual(result.benchmark.weights,Array(10).fill(.1));
-  close(result.benchmark.testStats.wealth.at(-1),result.testModel.returns.reduce((wealth,row)=>wealth*(1+row.reduce((sum,value)=>sum+value,0)/10),1));
+  close(result.testModel.returns[0][0],demo.rows[60].values[1]/demo.rows[59].values[1]/(demo.rows[60].cpi/demo.rows[59].cpi)-1);
+  assert.deepEqual(result.benchmark.weights,Array(9).fill(1/9));
+  close(result.benchmark.testStats.wealth.at(-1),result.testModel.returns.reduce((wealth,row)=>wealth*(1+row.reduce((sum,value)=>sum+value,0)/9),1));
 });
 
 test('infeasible criteria return explicit errors while valid portfolios and benchmark remain',()=>{
@@ -83,7 +84,6 @@ test('split validation requires twelve returns in both periods and rejects malfo
   assert.throws(()=>runBacktest(demo,{nominalRf:-1}),/ставка/);
   assert.throws(()=>runBacktest(demo,{nominalRf:Infinity}),/ставка/);
   assert.throws(()=>runBacktest(demo,{frequency:4}),/периодичность/);
-  assert.throws(()=>runBacktest(demo,{cash:'yes'}),/логическим/);
   assert.throws(()=>runBacktest(demo,{modes:['unknown']}),/критериев/);
   assert.throws(()=>runBacktest(demo,{modes:['sharpe','sharpe']}),/различных/);
   const invalid=structuredClone(demo);invalid.rows[65].cpi=0;
@@ -98,10 +98,11 @@ test('default boundary and dates between observations resolve to available train
   assert.equal(between.requestedSplitDate,'2023-12-15');
 });
 
-test('cash mode is consistent in training and test without mutating input data',()=>{
-  const original=structuredClone(demo),result=runBacktest(demo,{...options,cash:true,modes:['markowitz']});
-  assert.deepEqual(demo,original);
-  close(result.testModel.returns[0][0],demo.rows[59].cpi/demo.rows[60].cpi-1);
-  assert.equal(result.testModel.names[0],'Рублёвый остаток');
-  assert.deepEqual(result.trainModel,estimate({...demo,rows:demo.rows.slice(0,60)},12,true));
+test('M2 cannot affect training weights or investment results',()=>{
+  const before=runBacktest(demo,options),changed=structuredClone(demo);
+  changed.rows.forEach((row,i)=>row.values[0]*=(1+i)**2);
+  const after=runBacktest(changed,options);
+  assert.deepEqual(after.portfolios,before.portfolios);
+  assert.deepEqual(after.benchmark,before.benchmark);
+  assert.ok(!after.trainModel.names.some(name=>/М2|M2/.test(name)));
 });

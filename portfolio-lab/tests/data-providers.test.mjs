@@ -119,7 +119,7 @@ test('data assembly compounds CPI correctly across the year boundary and rejects
   assert.equal(data.rows[1].cpi, 100.2);
   assert.ok(Math.abs(data.rows.at(-1).cpi / data.rows.at(-2).cpi - 1.014) < 1e-12);
   const model = estimate(data, 12, false);
-  assert.ok(Math.abs(model.returns[0][0] - ((1030/1000)/1.002-1)) < 1e-12);
+  assert.ok(Math.abs(model.returns[0][0] - ((data.rows[1].values[1]/data.rows[0].values[1])/1.002-1)) < 1e-12);
   assert.equal(data.demo, false);
   assert.equal(data.names.length, 10);
   assert.equal(data.provenance.length, 4);
@@ -224,7 +224,7 @@ test('malformed source payloads are rejected without network retries', async () 
   assert.equal(attempts, 1);
 });
 
-test('server exposes validation errors as JSON and keeps the static download route', async t => {
+test('server exposes validation errors as JSON and serves official source data and removes generated downloads', async t => {
   const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('..', import.meta.url), env: {...process.env, PORT:'0'}, stdio:['ignore','pipe','pipe'] });
   t.after(() => child.kill());
   const output = await Promise.race([once(child.stdout, 'data'), once(child, 'exit').then(() => {throw Error('Server exited before starting');})]);
@@ -236,7 +236,8 @@ test('server exposes validation errors as JSON and keeps the static download rou
   const post = await fetch(`http://127.0.0.1:${port}/api/market-data`, {method:'POST'});
   assert.equal(post.status, 405);
   assert.equal(post.headers.get('allow'), 'GET');
-  const file = await fetch(`http://127.0.0.1:${port}/examples/portfolio-example.xlsx`);
+  const file = await fetch(`http://127.0.0.1:${port}/data/market-data.json`);
   assert.equal(file.status, 200);
-  assert.match(file.headers.get('content-type'), /spreadsheetml/);
+  assert.match(file.headers.get('content-type'), /application\/json/);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/examples/portfolio-example.xlsx`)).status,404);
 });
