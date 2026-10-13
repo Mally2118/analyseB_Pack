@@ -79,10 +79,16 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
+      - name: Validate website packaging
+        run: node --test portfolio-lab/tests/pages-build.test.mjs
+
+      - name: Prepare versioned website
+        run: node portfolio-lab/prepare-pages.mjs
+
       - name: Upload website
         uses: actions/upload-pages-artifact@v4
         with:
-          path: portfolio-lab/dist
+          path: portfolio-lab/artifacts/pages
 
       - name: Deploy website
         id: deployment
