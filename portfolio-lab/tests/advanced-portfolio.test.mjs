@@ -19,16 +19,16 @@ test('short positions improve the objective when allowed and preserve net capita
  assert.ok(short.weights[1]<0);assert.ok(short.return-short.objective>long.return-long.objective);check(short.weights,weightBounds(3,constraints));
 });
 test('all criteria and frontier obey minimum, maximum and exclusions; constraints reject impossible cases',()=>{
- const m=estimate(officialData(),12,{covariance:'oas'}),constraints={short:true,minWeight:-.2,maxWeight:.4,excluded:[0,2,4]},o=createOptimizer(m,constraints),b=weightBounds(9,constraints);
+ const m=estimate(officialData(),12,{covariance:'oas'}),constraints={short:true,minWeight:-.2,maxWeight:.4,excluded:[0,2,4]},o=createOptimizer(m,constraints),b=weightBounds(officialData().names.length-1,constraints);
  for(const p of [...o.frontier,...['markowitz','sharpe','risk','return'].map(mode=>o.solve(mode,{targetReturn:o.global.return,targetRisk:Math.max(.5,o.global.risk)}))]){check(p.weights,b);assert.ok(exposures(p.weights).short<=.25+1e-8);assert.ok(exposures(p.weights).gross<=1.5+1e-8);for(const i of constraints.excluded)assert.equal(p.weights[i],0);}
- assert.throws(()=>createOptimizer(m,{minWeight:.12}),/несовместимы/);assert.throws(()=>createOptimizer(m,{maxWeight:.1}),/несовместимы/);assert.throws(()=>createOptimizer(m,{minWeight:-.1}),/границы/);assert.throws(()=>createOptimizer(m,{excluded:[0,0]}),/границы/);
- assert.throws(()=>createOptimizer(m,{minWeight:1/9,maxWeight:1/9}),/меньше максимального/);
- const allFixed=createOptimizer(m,{minWeight:0,maxWeight:1/9});check(allFixed.global.weights,allFixed.bounds);close(allFixed.frontier.at(-1).return,allFixed.global.return);
+ assert.throws(()=>createOptimizer(m,{minWeight:.12}),/несовместимы/);assert.throws(()=>createOptimizer(m,{maxWeight:.09}),/несовместимы/);assert.throws(()=>createOptimizer(m,{minWeight:-.1}),/границы/);assert.throws(()=>createOptimizer(m,{excluded:[0,0]}),/границы/);
+ assert.throws(()=>createOptimizer(m,{minWeight:1/m.mu.length,maxWeight:1/m.mu.length}),/меньше максимального/);
+ const allFixed=createOptimizer(m,{minWeight:0,maxWeight:1/m.mu.length});check(allFixed.global.weights,allFixed.bounds);close(allFixed.frontier.at(-1).return,allFixed.global.return);
 });
 test('bounded solver cannot be beaten by independent random feasible portfolios',()=>{
  const m=estimate(officialData(),12,{covariance:'oas'}),options={short:true,minWeight:-.2,maxWeight:.4,excluded:[3]},o=createOptimizer(m,options),solution=o.solve('markowitz',{lambda:2});
  let seed=44;const random=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/2**32);
- for(let k=0;k<20000;k++){const w=Array.from({length:9},()=>-.2+random()*.6);w[3]=0;w[8]=1-w.slice(0,8).reduce((a,b)=>a+b,0);if(w[8]<-.2||w[8]>.4||exposures(w).short>.25)continue;assert.ok(dot(w,m.mu)-2*variance(w,m.stabilized)<=solution.return-2*solution.objective+1e-7);}
+ for(let k=0;k<20000;k++){const w=Array.from({length:m.mu.length},()=>-.2+random()*.6);w[3]=0;w[m.mu.length-1]=1-w.slice(0,-1).reduce((a,b)=>a+b,0);if(w[m.mu.length-1]<-.2||w[m.mu.length-1]>.4||exposures(w).short>.25)continue;assert.ok(dot(w,m.mu)-2*variance(w,m.stabilized)<=solution.return-2*solution.objective+1e-7);}
 });
 test('OAS implements the empirical-covariance formula, regularizes singular series and preserves means',()=>{
  const data=officialData(),sample=estimate(data),oas=estimate(data,12,{covariance:'oas'});assert.deepEqual(oas.mu,sample.mu);assert.deepEqual(oas.returns,sample.returns);assert.ok(oas.shrinkage>0&&oas.shrinkage<=1);
@@ -41,11 +41,11 @@ test('signed portfolio paths include negative returns contributions and reject b
  assert.throws(()=>metrics({...m,returns:[[0,6],[0,0]]},w),/неположительным/);
 });
 test('holdout applies constraints and training-only OAS while reporting actual sample volatility',()=>{
- const constraints={short:true,minWeight:-.2,maxWeight:.4,excluded:[1,3]},r=runBacktest(officialData(),{constraints,covariance:'oas'});assert.equal(r.trainModel.covariance,'oas');assert.equal(r.testModel.covariance,'sample');for(const p of [...r.portfolios,r.benchmark])check(p.weights,weightBounds(9,constraints));
+ const constraints={short:true,minWeight:-.2,maxWeight:.4,excluded:[1,3]},r=runBacktest(officialData(),{constraints,covariance:'oas'});assert.equal(r.trainModel.covariance,'oas');assert.equal(r.testModel.covariance,'sample');for(const p of [...r.portfolios,r.benchmark])check(p.weights,weightBounds(officialData().names.length-1,constraints));
 });
 test('rolling windows are chronological, complete and match manually compounded held-out returns',()=>{
  const data=officialData(),options={window:24,step:5,covariance:'oas',constraints:{short:true,minWeight:-.2,maxWeight:.4,excluded:[1]},modes:['markowitz']},r=runRollingBacktest(data,options),p=r.portfolios[0];assert.equal(r.errors.length,0);assert.equal(p.returns.length,data.rows.length-1-24);assert.equal(r.testDates.length,p.returns.length+1);
- let wealth=1,offset=24;for(const fold of p.folds){assert.equal(fold.trainTo,fold.boundary);assert.ok(fold.trainTo<fold.testFrom);check(fold.weights,weightBounds(9,options.constraints));const end=data.rows.findIndex(row=>row.date===fold.testTo);for(let i=offset+1;i<=end;i++){const a=data.rows[i-1],b=data.rows[i];wealth*=1+fold.weights.reduce((sum,w,j)=>sum+w*((b.values[j+1]/a.values[j+1])/(b.cpi/a.cpi)-1),0);close(p.testStats.wealth[i-24],wealth);}offset=end;}
+ let wealth=1,offset=24;for(const fold of p.folds){assert.equal(fold.trainTo,fold.boundary);assert.ok(fold.trainTo<fold.testFrom);check(fold.weights,weightBounds(officialData().names.length-1,options.constraints));const end=data.rows.findIndex(row=>row.date===fold.testTo);for(let i=offset+1;i<=end;i++){const a=data.rows[i-1],b=data.rows[i];wealth*=1+fold.weights.reduce((sum,w,j)=>sum+w*((b.values[j+1]/a.values[j+1])/(b.cpi/a.cpi)-1),0);close(p.testStats.wealth[i-24],wealth);}offset=end;}
  assert.equal(offset,data.rows.length-1);close(p.testStats.totalReturn,wealth-1);assert.ok(r.windows.at(-1).testTo===data.rows.at(-1).date);
  const future=structuredClone(data),firstBoundary=options.window;future.rows.slice(firstBoundary+1).forEach((row,i)=>{row.cpi*=1+(i+1)*.02;row.values[1]*=1+(i+1)*.05;});const altered=runRollingBacktest(future,options);assert.deepEqual(altered.portfolios[0].folds[0],p.folds[0]);assert.notEqual(altered.portfolios[0].testStats.totalReturn,p.testStats.totalReturn);
 });
@@ -55,7 +55,7 @@ test('rolling rejects invalid windows and removes an entire criterion if any fol
 test('short constraints and estimator survive saved sets and common-period frontier recalculation',()=>{
  const data=officialData(),constraints={short:true,minWeight:-.2,maxWeight:.4,excluded:[1]},model=estimate(data,12,{covariance:'oas',excluded:constraints.excluded}),optimizer=createOptimizer(model,constraints),settings={rf:0,nominalRf:.08,lambda:3,constraints,covariance:'oas'},current={...optimizer.solve('markowitz'),id:'current',name:'Марковиц',mode:'markowitz',settings};
  const state={data,model,current,saved:[{...current,id:'p1',ordinal:1,snapshot:{data,model,frontier:optimizer.frontier}}],capital:1e6,sequence:1};const payload=serializeComparison(state),restored=restoreComparison(payload);assert.deepEqual(restored.current.weights,current.weights);assert.deepEqual(restored.current.settings.constraints,constraints);assert.equal(restored.model.covariance,'oas');
- const period={from:model.dates[10],to:model.dates.at(-1)},evaluated=reportPortfolio(restored.saved[0],restored,period);assert.equal(evaluated.snapshot.model.covariance,'oas');evaluated.snapshot.frontier.forEach(p=>check(p.weights,weightBounds(9,constraints)));
+ const period={from:model.dates[10],to:model.dates.at(-1)},evaluated=reportPortfolio(restored.saved[0],restored,period);assert.equal(evaluated.snapshot.model.covariance,'oas');evaluated.snapshot.frontier.forEach(p=>check(p.weights,weightBounds(officialData().names.length-1,constraints)));
  const invalid=structuredClone(payload);invalid.current.settings.constraints.short=false;assert.throws(()=>restoreComparison(invalid));
 });
 

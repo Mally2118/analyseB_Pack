@@ -53,8 +53,8 @@ test('held-out paths use training weights, period CPI and the same training rate
     close(portfolio.testStats.sharpe,(portfolio.testStats.realizedReturn-result.rf)/portfolio.testStats.risk);
   }
   close(result.testModel.returns[0][0],demo.rows[60].values[1]/demo.rows[59].values[1]/(demo.rows[60].cpi/demo.rows[59].cpi)-1);
-  assert.deepEqual(result.benchmark.weights,Array(9).fill(1/9));
-  close(result.benchmark.testStats.wealth.at(-1),result.testModel.returns.reduce((wealth,row)=>wealth*(1+row.reduce((sum,value)=>sum+value,0)/9),1));
+  assert.deepEqual(result.benchmark.weights,Array(officialData().names.length-1).fill(1/(officialData().names.length-1)));
+  close(result.benchmark.testStats.wealth.at(-1),result.testModel.returns.reduce((wealth,row)=>wealth*(1+row.reduce((sum,value)=>sum+value,0)/row.length),1));
 });
 
 test('infeasible criteria return explicit errors while valid portfolios and benchmark remain',()=>{

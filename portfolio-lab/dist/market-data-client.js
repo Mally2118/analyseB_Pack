@@ -32,9 +32,9 @@ function validateDataset(dataset, errorMessage = INVALID_DATA) {
   const invalid = () => { throw Error(errorMessage); };
   if (!dataset || dataset.demo !== false || dataset.frequency !== 12 ||
       typeof dataset.source !== 'string' || !dataset.source.trim() ||
-      !Array.isArray(dataset.names) || dataset.names.length !== 10 ||
+      !Array.isArray(dataset.names) || ![10, 11].includes(dataset.names.length) ||
       dataset.names.some(name => typeof name !== 'string' || !name.trim() || name.length > 80) ||
-      new Set(dataset.names).size !== 10 ||
+      new Set(dataset.names).size !== dataset.names.length ||
       !Array.isArray(dataset.rows) || dataset.rows.length < 13 || dataset.rows.length > 1200 ||
       typeof dataset.downloadedAt !== 'string' || !Number.isFinite(Date.parse(dataset.downloadedAt))) invalid();
   let previous;
@@ -42,7 +42,7 @@ function validateDataset(dataset, errorMessage = INVALID_DATA) {
     const month = typeof row?.date === 'string' ? row.date.slice(0, 7) : '';
     if (!MONTH.test(month) || row.date !== monthEnd(month) ||
         (previous !== undefined && monthIndex(month) !== previous + 1) ||
-        !positive(row.cpi) || !Array.isArray(row.values) || row.values.length !== 10 ||
+        !positive(row.cpi) || !Array.isArray(row.values) || row.values.length !== dataset.names.length ||
         !row.values.every(positive)) invalid();
     previous = monthIndex(month);
   }

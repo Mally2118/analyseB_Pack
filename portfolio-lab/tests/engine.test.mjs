@@ -5,9 +5,9 @@ import {parseTable,parseDate,estimate,createOptimizer,metrics,dot,variance} from
 const close=(a,b,tol=1e-7)=>assert.ok(Math.abs(a-b)<tol,`${a} != ${b}`);
 const demo=officialData(),model=estimate(demo),opt=createOptimizer(model);
 test('inflation adjustment uses price ratios, with M2 excluded from investment returns',()=>{
-  const d=officialData();d.rows.forEach((r,t)=>{r.values=Array(10).fill(100*Math.pow(1.01,t));r.cpi=100*Math.pow(1.005,t);});
+  const d=officialData();d.rows.forEach((r,t)=>{r.values=Array(d.names.length).fill(100*Math.pow(1.01,t));r.cpi=100*Math.pow(1.005,t);});
   const m=estimate(d);close(m.returns[0][0],1.01/1.005-1);close(m.mu[0],12*(1.01/1.005-1));
-  assert.equal(m.names.length,9);assert.ok(!m.names.some(name=>/М2|M2/.test(name)));assert.deepEqual(m.sourceIndices,[1,2,3,4,5,6,7,8,9]);
+  assert.equal(m.names.length,d.names.length-1);assert.ok(!m.names.some(name=>/М2|M2/.test(name)));assert.deepEqual(m.sourceIndices,Array.from({length:d.names.length-1},(_,i)=>i+1));
 });
 test('minimum variance matches the analytic answer for diagonal covariance',()=>{
   const cov=Array.from({length:10},(_,i)=>Array.from({length:10},(_,j)=>i===j?.01*(i+1):0));
@@ -49,12 +49,12 @@ test('realized wealth includes initial capital and recovery uses calendar dates'
   close(s.wealth[0],1);close(s.wealth[3],1);close(s.wealth.at(-1),.81);close(s.maxDrawdown,-.2);close(s.longestRecovery,90);close(s.openRecovery,61);close(s.expectedIncome,100);close(s.totalReturn,-.19);
 });
 test('a constant path has no drawdown and undefined Sharpe',()=>{
-  const d=officialData();d.rows.forEach(r=>{r.values=Array(10).fill(100);r.cpi=100;});const m=estimate(d);const o=createOptimizer(m);const s=metrics(m,o.global.weights);
+  const d=officialData();d.rows.forEach(r=>{r.values=Array(d.names.length).fill(100);r.cpi=100;});const m=estimate(d);const o=createOptimizer(m);const s=metrics(m,o.global.weights);
   close(s.totalReturn,0);close(s.maxDrawdown,0);assert.equal(s.sharpe,null);assert.equal(s.longestRecovery,0);assert.equal(s.openRecovery,0);
 });
 test('Excel schema roundtrip and localized numeric cells',()=>{
   const table=[['Дата','ИПЦ',...demo.names],...demo.rows.map(r=>[r.date,r.cpi,...r.values])];
-  table[1][2]='58 000,5';const d=parseTable(table);close(d.rows[0].values[0],58000.5);assert.equal(d.names.length,10);
+  table[1][2]='58 000,5';const d=parseTable(table);close(d.rows[0].values[0],58000.5);assert.equal(d.names.length,demo.names.length);
   assert.equal(parseDate('31.01.2020'),'2020-01-31');assert.equal(parseDate(43861),'2020-01-31');
   assert.throws(()=>parseDate('2020-02-31'),/Некорректная/);
 });
@@ -63,7 +63,7 @@ test('import rejects gaps, duplicate dates, empty values, duplicate names and ex
   let t=table();t[2][0]=t[1][0];assert.throws(()=>parseTable(t),/возрастать/);
   t=table();t[1][3]=null;assert.throws(()=>parseTable(t),/отсутствует/);
   t=table();t[0][3]=t[0][2];assert.throws(()=>parseTable(t),/уникальными/);
-  t=table();t[2].push(15);assert.throws(()=>parseTable(t),/12 столбцов/);
+  t=table();t[2].push(15);assert.throws(()=>parseTable(t),/12 или 13 столбцов/);
   const d=officialData();d.rows.splice(2,1);assert.throws(()=>estimate(d,12),/последовательный месяц/);
 });
 test('independent random feasible portfolios never beat optimized objectives',()=>{
@@ -78,8 +78,8 @@ test('independent random feasible portfolios never beat optimized objectives',()
 
 test('known wealth path has correct annual return, volatility and unfinished maximum recovery',()=>{
   const levels=[100,80,100,90,81,81,81,81,81,81,81,81,81];
-  const rows=levels.map((v,i)=>({date:new Date(Date.UTC(2020,i+1,0)).toISOString().slice(0,10),cpi:100,values:Array(10).fill(v)}));
-  const m=estimate({names:demo.names,rows}),s=metrics(m,Array(9).fill(1/9),0,1000000);
+  const rows=levels.map((v,i)=>({date:new Date(Date.UTC(2020,i+1,0)).toISOString().slice(0,10),cpi:100,values:Array(demo.names.length).fill(v)}));
+  const m=estimate({names:demo.names,rows}),s=metrics(m,Array(model.mu.length).fill(1/model.mu.length),0,1000000);
   close(s.expectedReturn,-.15);close(s.expectedIncome,-150000);
   close(s.risk,Math.sqrt((.1225-12*.0125**2)/11*12));
   close(s.cagr,-.19);close(s.totalReturn,-.19);close(s.maxDrawdown,-.2);
@@ -94,11 +94,11 @@ test('completed maximum recovery remains exact when an ongoing episode is shorte
 test('numerical overflow is rejected instead of producing infinite curves',()=>{
   const m={returns:Array.from({length:100},()=>Array(10).fill(1e10)),mu:Array(10).fill(.1),cov:Array.from({length:10},()=>Array(10).fill(.01)),frequency:12,dates:Array(101).fill('2020-01-01')};
   assert.throws(()=>metrics(m,Array(10).fill(.1)),/числовой диапазон/);
-  assert.throws(()=>metrics(model,Array(9).fill(1/9),0,Infinity),/конечными/);
+  assert.throws(()=>metrics(model,Array(model.mu.length).fill(1/model.mu.length),0,Infinity),/конечными/);
 });
 test('import limit is exactly 5000 observations and missing header cells are rejected',()=>{
-  const table=[['Дата','ИПЦ',...demo.names],...Array.from({length:5000},(_,i)=>[new Date(Date.UTC(1900,i,1)).toISOString().slice(0,10),100,...Array(10).fill(100)])];
+  const table=[['Дата','ИПЦ',...demo.names],...Array.from({length:5000},(_,i)=>[new Date(Date.UTC(1900,i,1)).toISOString().slice(0,10),100,...Array(demo.names.length).fill(100)])];
   assert.equal(parseTable(table).rows.length,5000);
-  table.push(['2500-01-01',100,...Array(10).fill(100)]);assert.throws(()=>parseTable(table),/5000/);
+  table.push(['2500-01-01',100,...Array(demo.names.length).fill(100)]);assert.throws(()=>parseTable(table),/5000/);
   const missing=[['Дата','ИПЦ',...demo.names],...demo.rows.map(r=>[r.date,r.cpi,...r.values])];delete missing[0][3];assert.throws(()=>parseTable(missing),/непустыми/);
 });

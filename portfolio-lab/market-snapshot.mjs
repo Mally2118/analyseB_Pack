@@ -1,4 +1,4 @@
-import { loadMarketData, monthEnd, ProviderError } from './data-providers.mjs';
+import { loadMarketData, monthEnd, ProviderError, OFFICIAL_FIRST_MONTH } from './data-providers.mjs';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -11,8 +11,8 @@ const closeEnough = (a, b) => Math.abs(a - b) <= Math.max(Math.abs(a), Math.abs(
 const fail = message => { throw new ProviderError(`Снимок статистики: ${message}`, { code: 'INVALID_SNAPSHOT' }); };
 
 function validateRows(payload) {
-  if (!payload || payload.demo !== false || payload.frequency !== 12 || !Array.isArray(payload.names) || payload.names.length !== 10 ||
-      payload.names.some(name => typeof name !== 'string' || !name.trim() || name.length > 120) || new Set(payload.names).size !== 10 ||
+  if (!payload || payload.demo !== false || payload.frequency !== 12 || !Array.isArray(payload.names) || ![10, 11].includes(payload.names.length) ||
+      payload.names.some(name => typeof name !== 'string' || !name.trim() || name.length > 120) || new Set(payload.names).size !== payload.names.length ||
       !/[МM]2/.test(payload.names[0])) fail('неверный набор официальных индикаторов.');
   const { from, to } = payload.period ?? {};
   if (!MONTH.test(from) || !MONTH.test(to) || from < FIRST_MONTH || to < from) fail('неверный период.');
@@ -20,7 +20,7 @@ function validateRows(payload) {
   for (let i = 0; i < payload.rows.length; i++) {
     const row = payload.rows[i];
     if (row?.date !== monthEnd(monthAt(index(from) + i)) || !Number.isFinite(row.cpi) || row.cpi <= 0 ||
-        !Array.isArray(row.values) || row.values.length !== 10 || row.values.some(value => !Number.isFinite(value) || value <= 0)) fail('пропуск или неверное значение в месячном ряду.');
+        !Array.isArray(row.values) || row.values.length !== payload.names.length || row.values.some(value => !Number.isFinite(value) || value <= 0)) fail('пропуск или неверное значение в месячном ряду.');
   }
   if (!closeEnough(payload.rows[0].cpi, 100)) fail('ИПЦ должен начинаться со 100.');
   if (typeof payload.downloadedAt !== 'string' || !Number.isFinite(Date.parse(payload.downloadedAt)) ||
@@ -52,7 +52,7 @@ export function stitchMarketChunks(chunks, downloadedAt = new Date().toISOString
   let lastIndex;
   for (const chunk of ordered) {
     validateRows(chunk);
-    if (chunk.names.some((name, i) => name !== first.names[i])) fail('состав индикаторов отличается между периодами.');
+    if (chunk.names.length !== first.names.length || chunk.names.some((name, i) => name !== first.names[i])) fail('состав индикаторов отличается между периодами.');
     const anchor = chunk.rows.find(row => merged.has(row.date));
     if (merged.size && !anchor) fail('периоды не перекрываются.');
     const scale = anchor ? merged.get(anchor.date).cpi / anchor.cpi : 1;
@@ -75,7 +75,7 @@ export function stitchMarketChunks(chunks, downloadedAt = new Date().toISOString
   return validateSnapshot({ ...ordered.at(-1), rows, period, downloadedAt, schemaVersion: 1, delivery: 'github-actions', availablePeriod: { ...period } });
 }
 
-export async function buildMarketSnapshot({ now = new Date(), load = loadMarketData, firstMonth = FIRST_MONTH, maxPublicationLag = 6 } = {}) {
+export async function buildMarketSnapshot({ now = new Date(), load = loadMarketData, firstMonth = OFFICIAL_FIRST_MONTH, maxPublicationLag = 6 } = {}) {
   if (!MONTH.test(firstMonth) || firstMonth < FIRST_MONTH) fail('неверный начальный месяц.');
   const closed = now.getUTCFullYear() * 12 + now.getUTCMonth() - 1;
   let terminal = closed;

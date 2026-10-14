@@ -27,6 +27,26 @@ function fixture() {
 const requested = ['2019-12', '2020-12'];
 const select = snapshot => selectSnapshotPeriod(snapshot, ...requested, { now });
 
+test('snapshot selection and the local API retain the corporate bond series and its inflation-adjusted returns', async () => {
+  const original = fixture();
+  original.names.push('Корпоративные облигации / RUCBTRNS');
+  original.rows.forEach((row, i) => row.values.push(100 * 1.006 ** i));
+  const selected = select(original);
+  assert.equal(selected.names.length, 11);
+  assert.equal(selected.rows[0].values[10], original.rows[11].values[10]);
+  for (let i = 1; i < selected.rows.length; i++) {
+    const previous = selected.rows[i - 1], row = selected.rows[i];
+    assert.ok(Math.abs(row.values[10] / previous.values[10] / (row.cpi / previous.cpi) - 1.006 / 1.004) < 1e-12);
+  }
+  const loaded = await loadOfficialMarketData(...requested, {now, baseURL: 'http://localhost:4173/', fetchImpl: async () => json(selected)});
+  assert.deepEqual(loaded.rows, selected.rows);
+  assert.equal(loaded.names[10], original.names[10]);
+  assert.equal(loaded.delivery, 'direct-api');
+  const incomplete = structuredClone(original);
+  incomplete.rows[0].values.pop();
+  assert.throws(() => select(incomplete), /Подготовленная статистика повреждена/);
+});
+
 test('snapshot selection rebases inflation without changing real returns or mutating the stored observations', () => {
   const original = fixture(), before = structuredClone(original), selected = select(original);
   assert.equal(selected.rows.length, 13);

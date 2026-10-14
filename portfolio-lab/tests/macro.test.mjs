@@ -29,10 +29,10 @@ test('M2 changes macro charts but cannot change any optimized investment weights
 });
 
 test('portfolio purchasing power is nominal compounded growth divided by cumulative CPI exactly once',()=>{
-  const data=officialData(),model=estimate(data),weights=Array(9).fill(1/9),stat=metrics(model,weights);
+  const data=officialData(),model=estimate(data),weights=Array(officialData().names.length-1).fill(1/(officialData().names.length-1)),stat=metrics(model,weights);
   let nominalCapital=1;
   for(let i=0;i<model.nominalReturns.length;i++){
-    nominalCapital*=1+model.nominalReturns[i].reduce((s,r)=>s+r/9,0);
+    nominalCapital*=1+model.nominalReturns[i].reduce((s,r)=>s+r/weights.length,0);
     const expected=nominalCapital/(data.rows[i+1].cpi/data.rows[0].cpi);
     assert.ok(Math.abs(stat.wealth[i+1]-expected)<1e-10);
   }

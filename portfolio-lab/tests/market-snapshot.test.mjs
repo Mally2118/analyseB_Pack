@@ -52,7 +52,7 @@ test('stitching rejects gaps, changed historical values and incompatible inflati
 
 test('builder finds the last jointly published month and fetches full history in valid provider windows', async () => {
   const calls = [];
-  const snapshot = await buildMarketSnapshot({ now, load: async (from, to) => {
+  const snapshot = await buildMarketSnapshot({ now, firstMonth: '2011-01', load: async (from, to) => {
     calls.push([from, to]);
     validatePeriod(from, to, now);
     if (to === '2026-09') throw new ProviderError('M2 not yet published', { code: 'MISSING_DATA', status: 422, missingMonth: '2026-09', latestAvailable: '2026-08' });
@@ -71,6 +71,26 @@ test('builder handles a short history with one provider request', async () => {
   } });
   assert.deepEqual(calls, [['2024-01', '2026-09']]);
   assert.equal(snapshot.rows.length, 33);
+});
+
+test('default snapshot starts at the first RUCBTRNS month and carries eleven indicator levels', async () => {
+  const calls = [];
+  const snapshot = await buildMarketSnapshot({now, load: async (from, to) => {
+    calls.push([from, to]);
+    const data = fixture(from, to);
+    data.names.push('Корпоративные облигации / RUCBTRNS');
+    data.rows.forEach((row, i) => row.values.push(100 + i));
+    return data;
+  }});
+  assert.deepEqual(calls, [['2018-12', '2026-09']]);
+  assert.equal(snapshot.names.length, 11);
+  assert.equal(snapshot.rows.length, 94);
+  assert.equal(snapshot.rows[0].values[10], 100);
+  assert.equal(snapshot.rows.at(-1).values[10], 193);
+  assert.equal(validateSnapshot(snapshot), snapshot);
+  const missingLevel = structuredClone(snapshot);
+  missingLevel.rows[0].values.pop();
+  assert.throws(() => validateSnapshot(missingLevel), /пропуск/);
 });
 
 test('publication fallback rejects internal historical gaps and publication delays over six months', async () => {

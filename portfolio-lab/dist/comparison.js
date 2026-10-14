@@ -88,9 +88,9 @@ export function restoreComparison(payload) {
   });
   const contexts=new Map(),ids=new Set();
   function unpack(portfolio){
-    if(!portfolio||!/^current$|^p\d+$/.test(portfolio.id)||ids.has(portfolio.id)||!['markowitz','sharpe','risk','return'].includes(portfolio.mode)||!Array.isArray(portfolio.weights)||portfolio.weights.length!==9||portfolio.weights.some(w=>!Number.isFinite(w))||Math.abs(portfolio.weights.reduce((a,b)=>a+b,0)-1)>1e-7||!Number.isInteger(portfolio.source)||!sources[portfolio.source]||portfolio.frequency!==12||typeof portfolio.name!=='string'||portfolio.name.length>160)invalid();
+    if(!portfolio||!/^current$|^p\d+$/.test(portfolio.id)||ids.has(portfolio.id)||!['markowitz','sharpe','risk','return'].includes(portfolio.mode)||!Array.isArray(portfolio.weights)||!Number.isInteger(portfolio.source)||!sources[portfolio.source]||portfolio.weights.length!==sources[portfolio.source].names.length-1||portfolio.weights.some(w=>!Number.isFinite(w))||Math.abs(portfolio.weights.reduce((a,b)=>a+b,0)-1)>1e-7||portfolio.frequency!==12||typeof portfolio.name!=='string'||portfolio.name.length>160)invalid();
     if(!portfolio.settings||Object.entries(portfolio.settings).some(([key,value])=>!['constraints','covariance'].includes(key)&&!Number.isFinite(value))||!Number.isFinite(portfolio.settings.nominalRf)||portfolio.settings.nominalRf<=-1||portfolio.settings.covariance!==undefined&&!['sample','oas'].includes(portfolio.settings.covariance))invalid();
-    const bounds=weightBounds(9,portfolio.settings.constraints),limits=exposureLimits(portfolio.settings.constraints),exposure=exposures(portfolio.weights);
+    const bounds=weightBounds(portfolio.weights.length,portfolio.settings.constraints),limits=exposureLimits(portfolio.settings.constraints),exposure=exposures(portfolio.weights);
     if(exposure.gross>limits.grossLimit+1e-7||exposure.short>limits.shortLimit+1e-7) {
       if(portfolio.settings.constraints?.short&&(portfolio.settings.constraints.grossLimit===undefined||portfolio.settings.constraints.shortLimit===undefined))throw Error('Сохранённый short-портфель превышает новые лимиты 150% gross / 25% short. Исходный набор сохранён в браузере; пересчитайте портфель с лимитами.');
       invalid();

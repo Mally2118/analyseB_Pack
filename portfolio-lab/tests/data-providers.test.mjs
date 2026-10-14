@@ -51,6 +51,7 @@ function fixtureFetch(overrides = {}) {
     if (url.includes('/ipc_mes_')) return new Response(workbook(cpiTable, '01'));
     if (url.includes('/xml_metall.asp')) return new Response(metalXML);
     if (url.includes('/XML_dynamic.asp')) return new Response(currencyXML);
+    if (url.includes('/RUCBTRNS/candles.json')) return new Response(JSON.stringify({ candles: { columns: ['begin', 'close'], data: months.map((m, i) => [`${m}-01 00:00:00`, 300 + i * 3]) } }));
     if (url.includes('/candles.json')) return new Response(JSON.stringify(candles));
     throw new Error(`Unexpected URL ${url}`);
   };
@@ -130,14 +131,40 @@ test('data assembly compounds CPI correctly across the year boundary and rejects
 test('provider orchestrates only official sources and returns a complete engine-compatible data set', async () => {
   const {fake,requested} = fixtureFetch();
   const data = await loadMarketData('2024-01','2025-01',{fetchImpl:fake,now,useCache:false});
-  assert.equal(requested.length, 9);
+  assert.equal(requested.length, 10);
   assert.ok(requested.every(url => ['www.cbr.ru','www.rosstat.gov.ru','iss.moex.com'].includes(new URL(url).hostname)));
   assert.equal(data.rows.length, 13);
   assert.equal(data.rows[0].values[0], 1000);
   assert.equal(data.rows[0].values[5], 100);
   assert.equal(data.rows[0].values[8], 200);
   assert.equal(data.names[0], 'Рублёвая масса М2');
+  assert.equal(data.names.length, 11);
+  assert.equal(data.names[10], 'Корпоративные облигации / RUCBTRNS');
+  assert.deepEqual(data.rows.map(row => row.values[10]), months.map((_, i) => 300 + i * 3));
+  const corporateRequest = new URL(requested.find(url => url.includes('/RUCBTRNS/')));
+  assert.equal(corporateRequest.hostname, 'iss.moex.com');
+  assert.equal(corporateRequest.searchParams.get('interval'), '31');
+  assert.equal(corporateRequest.searchParams.get('from'), '2024-01-01');
+  assert.equal(corporateRequest.searchParams.get('till'), '2025-01-31');
+  const model = estimate(data, 12);
+  assert.equal(model.names.length, 10);
+  assert.ok(Math.abs(model.returns[0][9] - ((303 / 300) / 1.002 - 1)) < 1e-12);
+  assert.ok(data.provenance.at(-1).indicators.includes(data.names[10]));
+  assert.match(data.provenance.at(-1).method, /RUCBTRNS/);
   assert.equal(estimate(data,12).returns.length, 12);
+});
+
+test('RUCBTRNS rejects unavailable history and missing monthly closes without substituting other indices', async () => {
+  const {fake, requested} = fixtureFetch();
+  await assert.rejects(loadMarketData('2018-11', '2019-11', {fetchImpl: fake, now, useCache: false}), error =>
+    error.status === 422 && error.code === 'MISSING_DATA' && error.message.includes('2018-12'));
+  assert.equal(requested.length, 0);
+  const fetchImpl = async url => {
+    if (!url.includes('/RUCBTRNS/')) return fake(url);
+    return new Response(JSON.stringify({candles: {columns: ['begin', 'close'], data: months.slice(1).map(m => [`${m}-01`, 300])}}));
+  };
+  await assert.rejects(loadMarketData('2024-01', '2025-01', {fetchImpl, now, useCache: false}), error =>
+    error.status === 422 && error.code === 'MISSING_DATA' && error.missingMonth === '2024-01' && error.message.includes('RUCBTRNS'));
 });
 
 test('upstream failure is explicit, and invalid periods make no network requests', async () => {

@@ -22,10 +22,10 @@ export function parseTable(table) {
   if(clean.length<14) throw Error('Нужно минимум 13 наблюдений уровней (12 периодов доходности).');
   if(clean.length>5001) throw Error('Максимум 5000 наблюдений.');
   const headers=clean[0];
-  if(headers.length!==12 || clean.slice(1).some(r=>r.length>12)) throw Error('Ожидаются 12 столбцов: Дата, ИПЦ и ровно 10 индикаторов.');
+  if(![12,13].includes(headers.length) || clean.slice(1).some(r=>r.length>headers.length)) throw Error('Ожидаются 12 или 13 столбцов: Дата, ИПЦ и 10 или 11 индикаторов.');
   if(!/^(дата|date)$/i.test(String(headers[0]).trim())||!/^(ипц|cpi)$/i.test(String(headers[1]).trim())) throw Error('Первые два заголовка должны быть «Дата» и «ИПЦ».');
   const names=Array.from(headers.slice(2),v=>String(v??'').trim());
-  if(names.some(n=>!n||n.length>80)||new Set(names).size!==10) throw Error('Имена десяти индикаторов должны быть уникальными, непустыми, до 80 символов.');
+  if(names.some(n=>!n||n.length>80)||new Set(names).size!==names.length) throw Error('Имена индикаторов должны быть уникальными, непустыми, до 80 символов.');
   const number=(value,label)=>{
     const s=typeof value==='string'?value.trim().replace(/\s/g,'').replace(',','.'):value;
     if(s===''||s===null||s===undefined||typeof s==='boolean') throw Error(`${label}: отсутствует числовое значение.`);

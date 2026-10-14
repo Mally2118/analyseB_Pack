@@ -63,6 +63,6 @@ test('independent feasible grids cannot beat Markowitz with its unchanged object
 });
 
 test('old uncapped short sets are retained intact and explicitly reject weights over the new defaults',()=>{
- const data=officialData(),model=estimate(data),current={id:'current',mode:'markowitz',name:'Марковиц',weights:[1,-.3,.3,0,0,0,0,0,0],settings:{rf:0,nominalRf:.08,lambda:3,constraints:{short:true,minWeight:-.3,maxWeight:1,excluded:[]}}};
+ const data=officialData();data.names.pop();data.rows.forEach(row=>row.values.pop());const model=estimate(data),current={id:'current',mode:'markowitz',name:'Марковиц',weights:[1,-.3,.3,0,0,0,0,0,0],settings:{rf:0,nominalRf:.08,lambda:3,constraints:{short:true,minWeight:-.3,maxWeight:1,excluded:[]}}};
  const payload=serializeComparison({data,model,current,saved:[],sequence:0,capital:1e6}),original=structuredClone(payload);assert.throws(()=>restoreComparison(payload),/превышает новые лимиты/);assert.deepEqual(payload,original);
 });

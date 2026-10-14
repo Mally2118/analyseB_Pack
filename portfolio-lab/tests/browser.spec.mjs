@@ -21,7 +21,8 @@ test('startup uses published source observations and excludes M2 from every port
   await ready(page);
   await expect(page.locator('#data-badge')).toHaveText('Официальные данные');
   await expect(page.locator('#mode')).toHaveValue('markowitz');
-  await expect(page.locator('#indicators-table tbody tr')).toHaveCount(9);
+  await expect(page.locator('#indicators-table tbody tr')).toHaveCount(model.names.length);
+  await expect(page.locator('#indicators-table tbody')).toContainText('Корпоративные облигации / RUCBTRNS');
   expect(await page.locator('#indicators-table tbody').textContent()).not.toMatch(/М2/);
   expect((await chart(page,'equity-chart')).series[0].data).toEqual(metrics(model,solution.weights,rf).wealth.map(v=>(v-1)*100));
   for(const mode of ['markowitz','sharpe','risk','return']){
@@ -48,7 +49,7 @@ test('inflation and M2 charts match source ratios and export SVG, with unavailab
   await page.screenshot({path:testInfo.outputPath('official-macro-desktop.png'),fullPage:true});
 });
 
-test('comparison, removal, common period, saved sets and Excel keep nine investable rows and source macro levels',async({page},testInfo)=>{
+test('comparison, removal, common period, saved sets and Excel keep ten investable rows and source macro levels',async({page},testInfo)=>{
   await ready(page);await tab(page,'comparison');await page.click('#compare-all-button');
   await expect(page.locator('#message')).not.toHaveClass(/error/);
   await expect(page.locator('#comparison-table tbody tr')).toHaveCount(5);
@@ -56,11 +57,13 @@ test('comparison, removal, common period, saved sets and Excel keep nine investa
   await page.fill('#comparison-from',start);await page.fill('#comparison-to',end);await page.click('#comparison-period-apply');
   await expect(page.locator('#message')).not.toHaveClass(/error/);
   const downloaded=await download(page,testInfo,'#export-button','official-comparison.xlsx');const book=XLSX.read(downloaded.bytes,{type:'buffer'});
-  const weights=XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1});expect(weights).toHaveLength(10);
+  const weights=XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1});expect(weights).toHaveLength(model.names.length+1);
+  expect(weights.at(-1)[0]).toContain('RUCBTRNS');
   expect(weights.slice(1).some(row=>/М2/.test(row[0]))).toBeFalsy();
   for(let i=1;i<weights[0].length;i++)expect(weights.slice(1).reduce((s,row)=>s+row[i],0)).toBeCloseTo(1,8);
   expect(book.SheetNames).toContain('Инфляция и М2');
   const source=XLSX.utils.sheet_to_json(book.Sheets['Исходные данные'],{header:1});expect(source[0][2]).toContain('М2');
+  expect(source[0].at(-1)).toContain('RUCBTRNS');
   const capital=XLSX.utils.sheet_to_json(book.Sheets['Реальный капитал'],{header:1});expect(capital[1][0]).toBe(start);expect(capital[1].slice(1)).toEqual(Array(5).fill(1e6));
   const firstId=await page.locator('[data-remove]').first().getAttribute('data-remove');await page.locator('[data-remove="'+firstId+'"]').click();
   await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);
@@ -75,10 +78,10 @@ test('holdout weights and equal-weight benchmark exclude M2 in charts, tables an
   await ready(page);await tab(page,'backtest');await page.click('#backtest-run-button');
   await expect(page.locator('#backtest-results')).toBeVisible();
   const weights=await chart(page,'backtest-weights-chart');const categories=weights.xAxis[0].data||weights.yAxis[0].data;
-  expect(categories).toHaveLength(9);expect(categories.some(name=>name.includes('М2'))).toBeFalsy();
-  expect(weights.series.at(-1).data).toEqual(Array(9).fill(100/9));
+  expect(categories).toHaveLength(model.names.length);expect(categories.some(name=>name.includes('М2'))).toBeFalsy();
+  expect(weights.series.at(-1).data).toEqual(Array(model.names.length).fill(100/model.names.length));
   const output=await download(page,testInfo,'#backtest-export-button','official-validation.xlsx');const book=XLSX.read(output.bytes,{type:'buffer'});
-  expect(XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1})).toHaveLength(10);
+  expect(XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1})).toHaveLength(model.names.length+1);
   expect(XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1}).slice(1).some(row=>row[0].includes('М2'))).toBeFalsy();
 });
 
@@ -128,7 +131,7 @@ test('a short published period keeps holdout disabled after recalculating, while
 test('English Excel reports translate asset names and keep M2 only in source and macro sheets',async({page},testInfo)=>{
   await ready(page);await page.click('#language-button');await tab(page,'comparison');
   const downloaded=await download(page,testInfo,'#export-button','english-official.xlsx'),book=XLSX.read(downloaded.bytes,{type:'buffer'});
-  const weights=XLSX.utils.sheet_to_json(book.Sheets.Weights,{header:1});expect(weights).toHaveLength(10);
+  const weights=XLSX.utils.sheet_to_json(book.Sheets.Weights,{header:1});expect(weights).toHaveLength(model.names.length+1);
   expect(JSON.stringify(weights)).not.toMatch(/[А-Яа-яЁё]/);expect(JSON.stringify(weights)).not.toContain('M2');
   expect(book.SheetNames).toContain('Inflation and M2');expect(book.SheetNames).toContain('Sources');
   const source=XLSX.utils.sheet_to_json(book.Sheets['Source data'],{header:1});expect(source[0][2]).toContain('M2');expect(JSON.stringify(source[0])).not.toMatch(/[А-Яа-яЁё]/);
@@ -146,8 +149,8 @@ test('short mode, bounds, OAS and graph exclusions preserve saved portfolios and
 
 test('minimum shares and maximum caps apply to every asset and impossible exclusions roll back',async({page})=>{
   await ready(page);await page.fill('#min-weight','5');await page.fill('#max-weight','20');await calculate(page);
-  const weights=await page.locator('#indicators-table tbody tr td:last-child strong').allTextContents();expect(weights).toHaveLength(9);
-  await tab(page,'graphs');for(const index of [0,1,2,3])await page.locator(`[data-asset="${index}"]`).uncheck();await page.locator('[data-asset="4"]').click();await expect(page.locator('[data-asset="4"]')).toBeChecked();await expect(page.locator('#asset-selection-status')).toContainText('несовместимы');await page.click('#include-all-assets');await expect(page.locator('#asset-toggles input:checked')).toHaveCount(9);
+  const weights=await page.locator('#indicators-table tbody tr td:last-child strong').allTextContents();expect(weights).toHaveLength(model.names.length);
+  await tab(page,'graphs');for(const index of [0,1,2,3,4])await page.locator(`[data-asset="${index}"]`).uncheck();await page.locator('[data-asset="5"]').click();await expect(page.locator('[data-asset="5"]')).toBeChecked();await expect(page.locator('#asset-selection-status')).toContainText('несовместимы');await page.click('#include-all-assets');await expect(page.locator('#asset-toggles input:checked')).toHaveCount(model.names.length);
 });
 
 test('rolling backtest uses dated moving windows and exports all weights and test observations',async({page},testInfo)=>{

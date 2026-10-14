@@ -42,8 +42,8 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: portfolio-lab/artifacts/market-data-cache.json
-          key: market-data-v1-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: market-data-v1-
+          key: market-data-rucbtrns-v2-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: market-data-rucbtrns-v2-
 
       - name: Prepare official Rosstat certificate chain
         env:
@@ -74,7 +74,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: portfolio-lab/artifacts/market-data-cache.json
-          key: market-data-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          key: market-data-rucbtrns-v2-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
