@@ -1,3 +1,4 @@
+import {weightBounds} from './constrained-optimizer.js';
 import {parseTable,estimate,createOptimizer,metrics} from './engine.js';
 
 export const comparisonMetrics=[
@@ -33,10 +34,10 @@ export function evaluatePortfolio(portfolio,context,period=null) {
   if(!dates.includes(period.from)||!dates.includes(period.to)||period.from>=period.to)throw Error('Выберите начальную и конечную даты, доступные всем портфелям.');
   const rows=source.rows.filter(row=>row.date>=period.from&&row.date<=period.to);
   if(rows.length<13)throw Error('В общем периоде нужно минимум 13 наблюдений для каждого портфеля.');
-  const key=`${sourceModel.frequency}:${period.from}:${period.to}`;
+  const key=JSON.stringify([sourceModel.frequency,sourceModel.covariance,portfolio.settings.constraints,period.from,period.to]);
   let cache=periodCache.get(source);if(!cache){cache=new Map();periodCache.set(source,cache);}
   let snapshot=cache.get(key);
-  if(!snapshot){const data={...source,rows},model=estimate(data,sourceModel.frequency);snapshot={data,model};cache.set(key,snapshot);}
+  if(!snapshot){const data={...source,rows},model=estimate(data,sourceModel.frequency,{covariance:sourceModel.covariance,excluded:portfolio.settings.constraints?.excluded});snapshot={data,model};cache.set(key,snapshot);}
   const nominalRf=portfolio.snapshot?portfolio.settings.nominalRf:context.nominalRf;
   const rf=(1+nominalRf)/(1+snapshot.model.inflation)-1;
   return {portfolio:{...portfolio,settings:{...portfolio.settings,rf},snapshot},model:snapshot.model,rf};
@@ -49,7 +50,7 @@ export function comparisonStat(portfolio,context,period=null) {
 
 export function reportPortfolio(portfolio,context,period=null) {
   const result=evaluatePortfolio(portfolio,context,period);
-  if(period&&!result.portfolio.snapshot.frontier)result.portfolio.snapshot.frontier=createOptimizer(result.model).frontier;
+  if(period&&!result.portfolio.snapshot.frontier)result.portfolio.snapshot.frontier=createOptimizer(result.model,portfolio.settings.constraints).frontier;
   return result.portfolio;
 }
 
@@ -87,13 +88,15 @@ export function restoreComparison(payload) {
   });
   const contexts=new Map(),ids=new Set();
   function unpack(portfolio){
-    if(!portfolio||!/^current$|^p\d+$/.test(portfolio.id)||ids.has(portfolio.id)||!['markowitz','sharpe','risk','return'].includes(portfolio.mode)||!Array.isArray(portfolio.weights)||portfolio.weights.length!==9||portfolio.weights.some(w=>!Number.isFinite(w)||w<0)||Math.abs(portfolio.weights.reduce((a,b)=>a+b,0)-1)>1e-7||!Number.isInteger(portfolio.source)||!sources[portfolio.source]||portfolio.frequency!==12||typeof portfolio.name!=='string'||portfolio.name.length>160)invalid();
-    if(!portfolio.settings||Object.values(portfolio.settings).some(value=>!Number.isFinite(value))||!Number.isFinite(portfolio.settings.nominalRf)||portfolio.settings.nominalRf<=-1)invalid();
+    if(!portfolio||!/^current$|^p\d+$/.test(portfolio.id)||ids.has(portfolio.id)||!['markowitz','sharpe','risk','return'].includes(portfolio.mode)||!Array.isArray(portfolio.weights)||portfolio.weights.length!==9||portfolio.weights.some(w=>!Number.isFinite(w))||Math.abs(portfolio.weights.reduce((a,b)=>a+b,0)-1)>1e-7||!Number.isInteger(portfolio.source)||!sources[portfolio.source]||portfolio.frequency!==12||typeof portfolio.name!=='string'||portfolio.name.length>160)invalid();
+    if(!portfolio.settings||Object.entries(portfolio.settings).some(([key,value])=>!['constraints','covariance'].includes(key)&&!Number.isFinite(value))||!Number.isFinite(portfolio.settings.nominalRf)||portfolio.settings.nominalRf<=-1||portfolio.settings.covariance!==undefined&&!['sample','oas'].includes(portfolio.settings.covariance))invalid();
+    const bounds=weightBounds(9,portfolio.settings.constraints);
+    if(portfolio.weights.some((w,i)=>w<bounds.lower[i]-1e-7||w>bounds.upper[i]+1e-7))invalid();
     if(portfolio.profile)invalid();
     if(portfolio.ordinal!==undefined&&(!Number.isInteger(portfolio.ordinal)||portfolio.ordinal<1))invalid();
     ids.add(portfolio.id);
-    const key=`${portfolio.source}:${portfolio.frequency}`;
-    if(!contexts.has(key)){const data=sources[portfolio.source],model=estimate(data,portfolio.frequency),optimizer=createOptimizer(model);contexts.set(key,{data,model,optimizer,frontier:optimizer.frontier});}
+    const key=JSON.stringify([portfolio.source,portfolio.frequency,portfolio.settings.covariance||'sample',portfolio.settings.constraints]);
+    if(!contexts.has(key)){const data=sources[portfolio.source],model=estimate(data,portfolio.frequency,{covariance:portfolio.settings.covariance||'sample',excluded:portfolio.settings.constraints?.excluded}),optimizer=createOptimizer(model,portfolio.settings.constraints);contexts.set(key,{data,model,optimizer,frontier:optimizer.frontier});}
     const context=contexts.get(key),rf=(1+portfolio.settings.nominalRf)/(1+context.model.inflation)-1;
     const restored={...portfolio,weights:[...portfolio.weights],settings:{...portfolio.settings,rf},visible:portfolio.visible!==false,compared:portfolio.compared!==false};
     delete restored.source;delete restored.frequency;delete restored.cash;delete restored.snapshot;

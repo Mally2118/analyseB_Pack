@@ -1,3 +1,4 @@
+import {signedWeightsOption} from './weight-charts.js';
 import {t,locale} from './i18n.js';
 
 // Figures in the report always use one portfolio. Only its final chart compares
@@ -114,6 +115,7 @@ function frontierOption(id,portfolios,args,p,comparison=false){
   };
 }
 function weightsOption(args,portfolio,p){
+  if(portfolio.weights.some(w=>w< -1e-8))return {...base('report-weights-chart',p),...signedWeightsOption(args.indicatorNames,portfolio.weights,args.colors,p.muted)};
   const id='report-weights-chart',narrow=($(id)?.clientWidth||600)<420;
   return {...base(id,p),
     tooltip:{...base(id,p).tooltip,trigger:'item',formatter:item=>`${escape(item.name)}<br><b>${escape(percent(item.value/100))}</b>`},

@@ -132,3 +132,26 @@ test('English Excel reports translate asset names and keep M2 only in source and
   expect(book.SheetNames).toContain('Inflation and M2');expect(book.SheetNames).toContain('Sources');
   const source=XLSX.utils.sheet_to_json(book.Sheets['Source data'],{header:1});expect(source[0][2]).toContain('M2');expect(JSON.stringify(source[0])).not.toMatch(/[А-Яа-яЁё]/);
 });
+
+test('short mode, bounds, OAS and graph exclusions preserve saved portfolios and signed Excel weights',async({page},testInfo)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));await ready(page);
+  await page.selectOption('#position-mode','short');await expect(page.locator('#min-weight')).toHaveValue('-30');await page.fill('#max-weight','50');await page.selectOption('#covariance-method','oas');await page.click('#calculate-button');
+  await expect(page.locator('#covariance-summary')).toContainText('OAS');const original=(await chart(page,'weights-chart')).series[0].data.map(item=>item.value);expect(original.some(w=>w<0)).toBeTruthy();expect(original.every(w=>w>=-30-1e-6&&w<=50+1e-6)).toBeTruthy();expect(original.reduce((a,b)=>a+b,0)).toBeCloseTo(100,6);
+  await page.click('#save-button');await tab(page,'graphs');await page.locator('[data-asset="0"]').uncheck();await expect(page.locator('#asset-selection-status')).toContainText('пересчитан');expect((await chart(page,'report-weights-chart')).series[0].data[0].value).toBe(0);
+  await page.selectOption('#report-portfolio','p1');expect((await chart(page,'report-weights-chart')).series[0].data.map(item=>item.value)).toEqual(original);
+  await tab(page,'comparison');const {bytes}=await download(page,testInfo,'#export-button','signed.xlsx'),book=XLSX.read(bytes,{type:'buffer'}),weights=XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1});expect(weights.some(row=>row.slice(1).some(v=>v<0))).toBeTruthy();expect(weights[1][1]).toBe(0);expect(weights[1][2]).toBeCloseTo(original[0]/100,8);
+  expect(errors).toEqual([]);
+});
+
+test('minimum shares and maximum caps apply to every asset and impossible exclusions roll back',async({page})=>{
+  await ready(page);await page.fill('#min-weight','5');await page.fill('#max-weight','20');await page.click('#calculate-button');
+  const weights=await page.locator('#indicators-table tbody tr td:last-child strong').allTextContents();expect(weights).toHaveLength(9);
+  await tab(page,'graphs');for(const index of [0,1,2,3])await page.locator(`[data-asset="${index}"]`).uncheck();await page.locator('[data-asset="4"]').click();await expect(page.locator('[data-asset="4"]')).toBeChecked();await expect(page.locator('#asset-selection-status')).toContainText('несовместимы');await page.click('#include-all-assets');await expect(page.locator('#asset-toggles input:checked')).toHaveCount(9);
+});
+
+test('rolling backtest uses dated moving windows and exports all weights and test observations',async({page},testInfo)=>{
+  await ready(page);await page.selectOption('#position-mode','short');await page.fill('#max-weight','50');await page.selectOption('#covariance-method','oas');await page.click('#calculate-button');await tab(page,'graphs');await page.locator('[data-asset="1"]').uncheck();await tab(page,'backtest');await page.selectOption('#backtest-kind','rolling');await expect(page.locator('#holdout-field')).toBeHidden();await page.fill('#rolling-window','24');await page.fill('#rolling-step','5');await page.click('#backtest-run-button');await expect(page.locator('#backtest-results')).toBeVisible();await expect(page.locator('#rolling-ledger')).toBeVisible();
+  const curve=await chart(page,'backtest-return-chart');expect(curve.xAxis[0].data).toHaveLength(36);expect(curve.series.every(s=>s.data.length===36)).toBeTruthy();
+  const {bytes}=await download(page,testInfo,'#backtest-export-button','rolling.xlsx'),book=XLSX.read(bytes,{type:'buffer'});const folds=XLSX.utils.sheet_to_json(book.Sheets['Окна и веса'],{header:1});expect(folds.length).toBeGreaterThan(7);for(const row of folds.slice(1)){expect(row[2]<row[3]).toBeTruthy();expect(row[8]).toBe(0);expect(row.slice(7).reduce((a,b)=>a+b,0)).toBeCloseTo(1,7);}expect(XLSX.utils.sheet_to_json(book.Sheets['Проверочный капитал'],{header:1})).toHaveLength(37);
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:testInfo.outputPath('rolling-mobile.png'),fullPage:true});
+});

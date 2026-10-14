@@ -1,3 +1,4 @@
+import {boundedOptimizer,weightBounds} from './constrained-optimizer.js';
 export const dot = (a,b) => a.reduce((s,v,i)=>s+v*b[i],0);
 export const mean = a => a.reduce((s,v)=>s+v,0)/a.length;
 export const variance = (w,c) => dot(w,c.map(row=>dot(row,w)));
@@ -37,7 +38,7 @@ export function parseTable(table) {
   return {names,rows,demo:false,source:'Загруженный Excel'};
 }
 
-export function estimate(data,frequency=12) {
+export function estimate(data,frequency=12,{covariance='sample',excluded=[]}={}) {
   const {rows}=data;
   if(rows.length<13) throw Error('Нужно не менее 13 наблюдений.');
   if(![1,12,252].includes(frequency)) throw Error('Неизвестная периодичность.');
@@ -55,13 +56,29 @@ export function estimate(data,frequency=12) {
   if(returns.some(r=>r.some(v=>!Number.isFinite(v)||v<=-1)))throw Error('Изменения уровней слишком велики для устойчивого расчёта. Проверьте числа и единицы измерения.');
   const means=sourceIndices.map((_,j)=>mean(returns.map(r=>r[j])));
   const mu=means.map(v=>v*frequency);
-  const cov=means.map((_,i)=>means.map((__,j)=>returns.reduce((s,r)=>s+(r[i]-means[i])*(r[j]-means[j]),0)/(returns.length-1)*frequency));
+  const sampleCov=means.map((_,i)=>means.map((__,j)=>returns.reduce((s,r)=>s+(r[i]-means[i])*(r[j]-means[j]),0)/(returns.length-1)*frequency));
+  if(!['sample','oas'].includes(covariance))throw Error('Неизвестный метод оценки ковариации.');
+  if(!Array.isArray(excluded)||new Set(excluded).size!==excluded.length||excluded.some(i=>!Number.isInteger(i)||i<0||i>=mu.length)||excluded.length>=mu.length)throw Error('Проверьте список исключённых активов.');
+  const included=mu.map((_,i)=>i).filter(i=>!excluded.includes(i));
+  let shrinkage=0,cov=sampleCov;
+  if(covariance==='oas') {
+    // OAS as in scikit-learn: empirical covariance (divisor T), shrink to trace(S)/p * I.
+    const p=included.length,T=returns.length,S=included.map(i=>included.map(j=>sampleCov[i][j]*(T-1)/T));
+    const center=S.reduce((sum,row,i)=>sum+row[i],0)/p;
+    const alpha=S.flat().reduce((sum,v)=>sum+v*v,0)/(p*p);
+    const denominator=(T+1)*(alpha-center*center/p);
+    shrinkage=denominator<=0?1:Math.min(1,Math.max(0,(alpha+center*center)/denominator));
+    cov=sampleCov.map((row,i)=>row.map((v,j)=>{
+      if(excluded.includes(i)||excluded.includes(j))return i===j?v:0;
+      return (1-shrinkage)*v*(T-1)/T+(i===j?shrinkage*center:0);
+    }));
+  }
   if(mu.some(v=>!Number.isFinite(v))||cov.some(r=>r.some(v=>!Number.isFinite(v))))throw Error('Не удалось оценить ковариацию: проверьте масштаб чисел.');
   // A tiny ridge makes singular / identical input series numerically solvable.
-  const ridge=Math.max(1e-12,Math.max(...cov.map((r,i)=>r[i]))*1e-10);
+  const ridge=Math.max(1e-12,Math.max(...included.map(i=>cov[i][i]))*1e-10);
   const stabilized=cov.map((r,i)=>r.map((v,j)=>v+(i===j?ridge:0)));
   const inflation=Math.pow(rows.at(-1).cpi/rows[0].cpi,frequency/(rows.length-1))-1;
-  return {mu,cov,stabilized,returns,nominalReturns,sourceIndices,frequency,inflation,dates:rows.map(r=>r.date),names:sourceIndices.map(i=>data.names[i])};
+  return {mu,cov,sampleCov,covariance,excluded:[...excluded],shrinkage,stabilized,returns,nominalReturns,sourceIndices,frequency,inflation,dates:rows.map(r=>r.date),names:sourceIndices.map(i=>data.names[i])};
 }
 
 function inverse(a) {
@@ -76,7 +93,8 @@ function inverse(a) {
   return m.map(row=>row.slice(n));
 }
 
-export function createOptimizer(model) {
+export function createOptimizer(model,options) {
+  if(options){weightBounds(model.mu.length,options);if(options.short||(options.minWeight??0)!==0||(options.maxWeight??1)!==1||options.excluded?.length)return boundedOptimizer(model,options);}
   const {mu,stabilized:cov}=model,n=mu.length,subsets=[];
   let global=null;
   const pack=(weights)=>({weights,return:dot(weights,mu),risk:Math.sqrt(Math.max(0,variance(weights,model.cov))),objective:variance(weights,cov)});
@@ -135,15 +153,15 @@ export function createOptimizer(model) {
     }
     throw Error('Неизвестный критерий.');
   }
-  return {global,frontier,solve,at};
+  return {global,frontier,solve,at,max};
 }
 
 export function metrics(model,weights,rf=0,capital=1000000) {
-  if(weights.length!==model.mu.length||weights.some(v=>!Number.isFinite(v)||v<0)||Math.abs(weights.reduce((s,v)=>s+v,0)-1)>1e-6) throw Error('Веса должны быть неотрицательными и в сумме равняться 100%.');
+  if(weights.length!==model.mu.length||weights.some(v=>!Number.isFinite(v))||Math.abs(weights.reduce((s,v)=>s+v,0)-1)>1e-6) throw Error('Веса должны быть конечными и в сумме равняться 100%.');
   if(!Number.isFinite(capital)||capital<=0||!Number.isFinite(rf))throw Error('Капитал и ставка должны быть конечными числами; капитал должен быть больше нуля.');
   const r=model.returns.map(row=>dot(row,weights));
   const wealth=[1];r.forEach(v=>wealth.push(wealth.at(-1)*(1+v)));
-  if(wealth.some(v=>!Number.isFinite(v)||v<=0||!Number.isFinite(v*capital)))throw Error('Исторический капитал выходит за допустимый числовой диапазон. Проверьте уровни индикаторов.');
+  if(wealth.some(v=>!Number.isFinite(v)||v<=0||!Number.isFinite(v*capital)))throw Error('Исторический капитал стал неположительным или вышел за числовой диапазон. При коротких продажах возможна потеря всего капитала.');
   let peak=1,peakIndex=0,maxDrawdown=0,longestRecovery=0,underwater=false;
   const drawdown=wealth.map((v,i)=>{
     if(v>=peak*(1-1e-12)) {

@@ -1,4 +1,4 @@
-import {runBacktest} from './backtest.js';
+import {runBacktest,runRollingBacktest} from './backtest.js';
 import {t,locale,translateError} from './i18n.js';
 
 const $=id=>document.getElementById(id);
@@ -6,13 +6,13 @@ const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const percent=value=>Number.isFinite(value)?new Intl.NumberFormat(locale(),{style:'percent',minimumFractionDigits:2,maximumFractionDigits:2}).format(value):'—';
 const number=value=>new Intl.NumberFormat(locale(),{maximumFractionDigits:0}).format(value);
 const money=value=>number(value)+' ₽';
-const modes={markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность',equal:'Равные доли — по 1/9'};
+const modes={markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность',equal:'Равные доли включённых активов'};
 const labels={'backtest-return-chart':'Доходность на проверке','backtest-drawdown-chart':'Просадки на проверке','backtest-weights-chart':'Веса, рассчитанные на обучении'};
 
 export function createBacktestView(getState) {
   let result=null,lastState=null,lastStatus=null;
   const charts=new Map();
-  const inputLabels=new Map(['backtest-lambda','backtest-target-return','backtest-target-risk'].map(id=>[id,$(id).labels[0].textContent]));
+  const inputLabels=new Map(['backtest-lambda','backtest-target-return','backtest-target-risk','rolling-window','rolling-step'].map(id=>[id,$(id).labels[0].textContent]));
   function status(key,error=false,values={}) {
     lastStatus={key,error,values};
     $('backtest-status').textContent=error?translateError(key):t(key,values);
@@ -25,7 +25,7 @@ export function createBacktestView(getState) {
   }
   function sync() {
     const state=getState();if(!state?.data)return;
-    const changed=!lastState||['data','frequency','capital','nominalRf'].some(key=>state[key]!==lastState[key]);
+    const changed=!lastState||['data','frequency','capital','nominalRf','constraints','covariance'].some(key=>state[key]!==lastState[key]);
     if(changed) {
       result=null;$('backtest-results').hidden=true;$('backtest-table').querySelector('tbody').replaceChildren();$('backtest-export-button').disabled=true;lastStatus=null;$('backtest-status').hidden=true;
       const rows=state.data.rows,ready=rows.length>=25;
@@ -35,12 +35,13 @@ export function createBacktestView(getState) {
         $('backtest-split').min=rows[12].date;$('backtest-split').max=rows[rows.length-13].date;
         $('backtest-split').value=rows[index].date;
       } else {$('backtest-split').value='';status('Для проверки нужно минимум 25 наблюдений: по 12 периодов на обучение и проверку.',true);}
+      $('rolling-window').value=String(Math.max(12,Math.min(36,rows.length-13)));
       lastState={...state};
     }
     $('backtest-period-hint').textContent=t('Минимум 12 периодов в каждой части. По умолчанию около 70% данных используются для обучения.');
     $('backtest-context').textContent=t('Общие параметры из последнего расчёта: {capital}, ставка {rate}, {frequency}.',{
       capital:money(state.capital),rate:percent(state.nominalRf),frequency:t({12:'Месячные данные',252:'Дневные данные',1:'Годовые данные'}[state.frequency])
-    });
+    })+' '+t('Границы: {min} … {max}; исключено: {count}; ковариация: {method}.',{min:percent(state.constraints?.minWeight??0),max:percent(state.constraints?.maxWeight??1),count:state.constraints?.excluded?.length||0,method:state.covariance==='oas'?'OAS':t('Выборочная')});
   }
   function name(portfolio) {
     const mode=portfolio.mode,base=t(modes[mode]);
@@ -72,6 +73,13 @@ export function createBacktestView(getState) {
     sync();
     if(lastStatus)status(lastStatus.key,lastStatus.error,lastStatus.values);
     if(!result)return;
+    $('backtest-weights-title').textContent=t(result.kind==='rolling'?'Веса последнего окна обучения':'Веса, рассчитанные на обучении');
+    $('rolling-ledger').hidden=result.kind!=='rolling';
+    $('backtest-weight-note').textContent=result.kind==='rolling'?t('Rolling: обучение пересчитывается в каждом окне. В таблице показана средняя обучающая доходность, взвешенная по длине проверки; диаграмма весов показывает последнее окно.'):t('Веса определены на обучении; доли восстанавливаются каждый период, без комиссий.');
+    $('rolling-ledger-body').innerHTML=result.kind==='rolling'?portfolios().flatMap(portfolio=>portfolio.folds.map(fold=>{
+      const long=fold.weights.reduce((a,w)=>a+Math.max(0,w),0),short=fold.weights.reduce((a,w)=>a+Math.max(0,-w),0);
+      return `<tr><td>${escape(name(portfolio))}</td><td>${fold.trainFrom} — ${fold.trainTo}</td><td>${fold.testFrom} — ${fold.testTo}</td><td>${percent(long)} / ${percent(short)}</td><td>${fold.weights.map((w,i)=>escape(t(result.trainModel.names[i]))+': '+percent(w)).join('; ')}</td></tr>`;
+    })).join(''):'';
     $('backtest-results').hidden=false;$('backtest-export-button').disabled=false;
     $('backtest-train-period').textContent=result.trainDates[0]+' — '+result.trainDates.at(-1);
     $('backtest-test-period').textContent=result.testDates[0]+' — '+result.testDates.at(-1);
@@ -90,7 +98,8 @@ export function createBacktestView(getState) {
     event.preventDefault();$('backtest-run-button').disabled=true;
     try {
       await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
-      const next=runBacktest(lastState.data,{...lastState,splitDate:$('backtest-split').value,settings:{lambda:numeric('backtest-lambda'),targetReturn:numeric('backtest-target-return')/100,targetRisk:numeric('backtest-target-risk')/100}});
+      const runner=$('backtest-kind').value==='rolling'?runRollingBacktest:runBacktest;
+      const next=runner(lastState.data,{...lastState,window:numeric('rolling-window'),step:numeric('rolling-step'),splitDate:$('backtest-split').value,settings:{lambda:numeric('backtest-lambda'),targetReturn:numeric('backtest-target-return')/100,targetRisk:numeric('backtest-target-risk')/100}});
       result=next;status('Проверка готова. Веса рассчитаны только на обучающем периоде.');render();
     }catch(error){status(error.message,true);}
     finally {$('backtest-run-button').disabled=lastState.data.rows.length<25;requestAnimationFrame(()=>$('backtest-status').scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'}));}
@@ -104,10 +113,12 @@ export function createBacktestView(getState) {
     add([[t('Дата'),...ps.map(name)],...result.testDates.map((date,index)=>[date,...ps.map(portfolio=>portfolio.testStats.drawdown[index])])],'Просадки');
     const boundary=lastState.data.rows.findIndex(row=>row.date===result.splitDate),rows=lastState.data.rows;
     const dataRows=subset=>[[t('Дата'),t('ИПЦ'),...lastState.data.names.map(name=>t(name))],...subset.map(row=>[row.date,row.cpi,...row.values])];
-    add(dataRows(rows.slice(0,boundary+1)),'Обучающие данные');add(dataRows(rows.slice(boundary)),'Проверочные данные');
-    add([[t('Параметр'),t('Значение')],[t('Источник'),lastState.data.source],[t('Последняя дата обучения'),result.splitDate],[t('Начальный капитал, ₽'),result.capital],[t('Номинальная ставка'),result.nominalRf],[t('Реальная безрисковая ставка'),result.rf],[t('Периодов в год'),lastState.frequency],[t('Ребалансировка'),t('Каждый период, без комиссий и налогов')],[t('Методика'),t('Веса и ставка определены только на обучении; показатели результата измерены на проверке.')],...Object.entries(result.settings),...result.errors.map(error=>[t(modes[error.mode]),translateError(error.message)])],'Методика');
+    if(result.kind==='rolling')add([[t('Портфель'),t('Обучение от'),t('Обучение до'),t('Проверка от'),t('Проверка до'),t('Реальная безрисковая ставка'),t('Сжатие OAS'),...result.trainModel.names.map(name=>t(name))],...ps.flatMap(portfolio=>portfolio.folds.map(fold=>[name(portfolio),fold.trainFrom,fold.trainTo,fold.testFrom,fold.testTo,fold.rf,fold.shrinkage,...fold.weights]))],'Окна и веса');
+    add(dataRows(result.kind==='rolling'?rows:rows.slice(0,boundary+1)),result.kind==='rolling'?'Исходные данные':'Обучающие данные');add(dataRows(rows.slice(boundary)),'Проверочные данные');
+    add([[t('Параметр'),t('Значение')],[t('Источник'),lastState.data.source],[t('Последняя дата обучения'),result.splitDate],[t('Начальный капитал, ₽'),result.capital],[t('Номинальная ставка'),result.nominalRf],[t('Реальная безрисковая ставка'),result.rf],[t('Периодов в год'),lastState.frequency],[t('Ребалансировка'),t('Каждый период, без комиссий и налогов')],[t('Методика'),t('Веса и ставка определены только на обучении; показатели результата измерены на проверке.')],[t('Способ проверки'),result.kind],[t('Окно обучения'),result.window??null],[t('Шаг пересчёта'),result.step??null],[t('Ковариация'),result.covariance],[t('Ограничения весов'),JSON.stringify(result.constraints||{})],[t('Короткие продажи'),t('Плата за заём, комиссии и маржинальные требования не учтены')],...Object.entries(result.settings),...result.errors.map(error=>[t(modes[error.mode]),translateError(error.message)])],'Методика');
     XLSX.writeFile(book,t('Проверка_портфелей.xlsx'),{compression:true});
   }
+  $('backtest-kind').addEventListener('change',()=>{const rolling=$('backtest-kind').value==='rolling';$('rolling-fields').hidden=!rolling;$('holdout-field').hidden=rolling;$('backtest-split').required=!rolling;result=null;$('backtest-results').hidden=true;$('backtest-export-button').disabled=true;});
   $('backtest-form').addEventListener('submit',run);
   $('backtest-export-button').addEventListener('click',exportWorkbook);
   document.querySelectorAll('[data-backtest-download]').forEach(button=>button.addEventListener('click',()=>{

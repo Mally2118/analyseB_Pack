@@ -1,6 +1,8 @@
 import {estimate,createOptimizer,metrics} from './engine.js';
 import {t,locale,language,theme,setLanguage,setTheme,captureStaticTranslations,translateStatic,translateError} from './i18n.js';
 import {renderReport,resizeReport,getReportChart} from './report-charts.js';
+import {weightBounds} from './constrained-optimizer.js';
+import {signedWeightsOption} from './weight-charts.js';
 import {createBacktestView} from './backtest-ui.js';
 import {createDataImportView} from './data-import-ui.js';
 import {macroSeries} from './macro.js';
@@ -20,6 +22,7 @@ let colors=theme==='dark'?darkColors:lightColors;
 const modes={markowitz:'Марковиц',sharpe:'Максимум Шарпа',risk:'Эффективный риск',return:'Эффективная доходность'};
 const descriptions={markowitz:'Максимум доходности с штрафом за риск. Чем выше λ, тем осторожнее портфель.',sharpe:'Максимум избыточной реальной доходности на единицу риска.',risk:'Минимальный риск при доходности не ниже заданного уровня.',return:'Максимальная доходность при риске не выше заданного лимита.'};
 let data=null,model,optimizer,current,saved=[],sequence=0,view='return',capital=1000000,rf=0,signature='',weightsColumns=0;
+let excludedAssets=[];
 let activeTab='portfolio',selectedReportId='current',reportView='return';
 const charts={};
 let lastMessage;
@@ -33,26 +36,34 @@ function modeFields(){
   }
 }
 function numeric(id){const value=$(id).value.trim();if(!value||!Number.isFinite(Number(value)))throw Error('Заполните числовой параметр: '+parameterLabels.get(id));return Number(value);}
+function constraintsFromInputs(){return {short:$('position-mode').value==='short',minWeight:numeric('min-weight')/100,maxWeight:numeric('max-weight')/100,excluded:[...excludedAssets]};}
+function calculationSignature(covariance,constraints){return JSON.stringify({frequency:12,covariance,constraints});}
+function restoreStrategyInputs(settings){
+  const constraints=settings.constraints||{short:false,minWeight:0,maxWeight:1,excluded:[]};
+  excludedAssets=[...(constraints.excluded||[])];$('position-mode').value=constraints.short?'short':'long';$('min-weight').min=constraints.short?'-100':'0';$('min-weight').value=constraints.minWeight*100;$('max-weight').value=constraints.maxWeight*100;$('covariance-method').value=settings.covariance||'sample';
+}
 function calculate({quiet=false}={}) {
   if(!data)throw Error('Сначала загрузите официальную статистику.');
   const newCapital=numeric('capital'),nominalRf=numeric('rf')/100;
   if(newCapital<=0||newCapital>1e15)throw Error('Начальный капитал должен быть больше нуля и не превышать 10¹⁵ ₽.');
   if(nominalRf<=-1)throw Error('Безрисковая ставка должна быть выше −100%.');
   const frequency=12;
-  const newSignature=`${frequency}`;
-  const nextModel=newSignature!==signature||!model?estimate(data,frequency):model;
-  const nextOptimizer=nextModel===model?optimizer:createOptimizer(nextModel);
+  const constraints=constraintsFromInputs(),covariance=$('covariance-method').value;
+  weightBounds(data.names.length-1,constraints);
+  const newSignature=calculationSignature(covariance,constraints);
+  const nextModel=!model||model.covariance!==covariance||JSON.stringify(model.excluded)!==JSON.stringify(constraints.excluded)?estimate(data,frequency,{covariance,excluded:constraints.excluded}):model;
+  const nextOptimizer=newSignature===signature&&nextModel===model?optimizer:createOptimizer(nextModel,constraints);
   const nextRf=(1+nominalRf)/(1+nextModel.inflation)-1;
   const mode=$('mode').value;
-  const settings={rf:nextRf,lambda:mode==='markowitz'?numeric('lambda'):3,targetReturn:mode==='risk'?numeric('target-return')/100:.1,targetRisk:mode==='return'?numeric('target-risk')/100:.2};
+  const settings={constraints,covariance,rf:nextRf,lambda:mode==='markowitz'?numeric('lambda'):3,targetReturn:mode==='risk'?numeric('target-return')/100:.1,targetRisk:mode==='return'?numeric('target-risk')/100:.2};
   const solution=nextOptimizer.solve(mode,settings);
   metrics(nextModel,solution.weights,nextRf,newCapital);
   const cleared=newSignature!==signature&&!!model;
+  if(cleared){for(const p of saved)if(!p.snapshot)p.snapshot={data,model,frontier:optimizer.frontier};}
   model=nextModel;optimizer=nextOptimizer;capital=newCapital;rf=nextRf;signature=newSignature;
-  if(cleared){saved=[];comparisonPeriod=null;}
   current={...solution,compared:true,id:'current',name:modes[mode],color:colors[0],mode,settings:{...settings,nominalRf},visible:true};
   render();
-  if(!quiet)message(cleared?'Портфель рассчитан. При смене периодичности или первого индикатора сравнение очищено.':'Портфель рассчитан. Добавьте результат к сравнению, затем выберите другой критерий.');
+  if(!quiet)message('Портфель рассчитан. Добавьте результат к сравнению, затем выберите другой критерий.');
   return {name:portfolioName(current),weights:[...current.weights],expectedReturn:current.return,risk:current.risk};
 }
 function allPortfolios(){return [current,...saved];}
@@ -70,12 +81,17 @@ function restoreComparisonState(state){
   optimizer=state.optimizer;comparisonPeriod=state.period;highlightComparison=state.highlight;
   allPortfolios().forEach((p,i)=>p.color=colors[i]);
   for(const [id,value] of Object.entries({mode:current.mode,capital,rf:current.settings.nominalRf*100,frequency:model.frequency,lambda:current.settings.lambda??3,'target-return':(current.settings.targetReturn??.1)*100,'target-risk':(current.settings.targetRisk??.2)*100}))$(id).value=String(value);
+  restoreStrategyInputs(current.settings);signature=calculationSignature(current.settings.covariance||'sample',constraintsFromInputs());
   $('report-comparison-view').value=reportView;modeFields();render();
 }
 function render() {
   if(!current)return;
   setReady(true);
-  const s=stat(current);
+  const s=stat(current),long=current.weights.reduce((sum,w)=>sum+Math.max(0,w),0),short=current.weights.reduce((sum,w)=>sum+Math.max(0,-w),0);
+  $('position-summary').textContent=t(current.settings.constraints?.short?'Короткие продажи':'Без коротких продаж');
+  $('exposure-summary').textContent=t('Длинные: {long} · короткие: {short} · общий объём: {gross}',{long:percent(long),short:percent(short),gross:percent(long+short)});
+  $('covariance-summary').textContent=model.covariance==='oas'?t('OAS · сжатие {rate}',{rate:percent(model.shrinkage)}):t('Выборочная ковариация');
+  $('asset-toggles').innerHTML=indicatorNames().map((name,i)=>`<label><input type="checkbox" data-asset="${i}" ${excludedAssets.includes(i)?'':'checked'}><span>${escape(name)}</span></label>`).join('');
   $('data-badge').textContent=t('Официальные данные');
   $('data-status').textContent=t('Официальные данные');
   $('data-info').textContent=`${data.rows[0].date} — ${data.rows.at(-1).date} · ${data.rows.length} ${t('наблюдений')} · ${t('инфляция')} ${percent(model.inflation)} ${t('/ год')}`;
@@ -91,17 +107,17 @@ function render() {
   $('drawdown-value').textContent=percent(s.maxDrawdown);
   $('recovery-value').textContent=recoveryText(s);
   $('recovery-note').textContent=s.recoveryIncomplete?t('Возврат к пику ещё не произошёл'):s.openRecovery?t('Текущее восстановление: ')+number(s.openRecovery)+' '+t('дн.'):t('По завершённым восстановлениям');
-  $('indicators-table').querySelector('tbody').innerHTML=indicatorNames().map((name,i)=>`<tr><td>${String(i+1).padStart(2,'0')}</td><td><span class="asset-name"><span class="swatch" style="background:${colors[i]}"></span>${escape(name)}</span></td><td>${percent(model.mu[i])}</td><td>${percent(Math.sqrt(model.cov[i][i]))}</td><td><span class="weight-cell"><strong>${percent(current.weights[i])}</strong><span class="weight-bar"><span style="width:${current.weights[i]*100}%"></span></span></span></td></tr>`).join('');
+  $('indicators-table').querySelector('tbody').innerHTML=indicatorNames().map((name,i)=>`<tr><td>${String(i+1).padStart(2,'0')}</td><td><span class="asset-name"><span class="swatch" style="background:${colors[i]}"></span>${escape(name)}</span></td><td>${percent(model.mu[i])}</td><td>${percent(Math.sqrt(model.cov[i][i]))}</td><td><span class="weight-cell"><strong>${percent(current.weights[i])}</strong><span class="weight-bar"><span style="width:${Math.abs(current.weights[i])*100}%;background:${current.weights[i]<0?"var(--muted)":"var(--accent)"}"></span></span></span></td></tr>`).join('');
   renderComparison();syncReportSelector();backtestView?.sync();renderCharts();
 }
 function renderComparison() {
   const frequency={12:'Месячные данные',252:'Дневные данные',1:'Годовые данные'}[model.frequency];
   $('comparison-context').textContent=t('Капитал: {capital} · ставка: {rate} · {frequency}',{capital:money(capital),rate:percent(current.settings.nominalRf),frequency:t(frequency)});
   $('comparison-rf').textContent=percent(current.settings.nominalRf);
-  $('comparison-return-limit').textContent=t('Максимальная доходность на этих данных: {rate}.',{rate:percent(Math.max(...model.mu))});
+  $('comparison-return-limit').textContent=t('Максимальная доходность на этих данных: {rate}.',{rate:percent(optimizer.max)});
   $('comparison-risk-limit').textContent=t('Минимально возможный риск: {risk}.',{risk:percent(optimizer.global.risk)});
   for(const status of document.querySelectorAll('[data-criterion-status]')) {
-    const count=saved.filter(p=>!p.snapshot&&p.mode===status.dataset.criterionStatus).length;
+    const count=saved.filter(p=>p.mode===status.dataset.criterionStatus).length;
     status.textContent=count?t('{count} в сравнении',{count}):t('Ещё не добавлен');status.classList.toggle('added',count>0);
   }
   const ps=comparisonPortfolios();
@@ -131,7 +147,7 @@ function renderComparison() {
     return `<tr data-portfolio-id="${p.id}" data-baseline="${p.id===baselineId}"><td><span class="asset-name"><span class="swatch" style="background:${p.color}"></span>${escape(portfolioName(p))}${p.id==='current'?t(' · текущий'):''}</span><small class="comparison-source">${escape(t('Официальные данные'))} · ${sourceModel.dates[0]} — ${sourceModel.dates.at(-1)}</small></td>${comparisonMetrics.map((_,j)=>metricCell(stats[i],i,j)).join('')}</tr>`;
   }).join('');
 }
-const chartLabels={'frontier-chart':'Эффективная граница и текущий портфель','equity-chart':'Кривая текущего портфеля','weights-chart':'Интерактивная круговая диаграмма весов текущего портфеля'};
+const chartLabels={'frontier-chart':'Эффективная граница и текущий портфель','equity-chart':'Кривая текущего портфеля','weights-chart':'Диаграмма весов текущего портфеля'};
 function baseChart(id){const css=getComputedStyle(document.documentElement),muted=css.getPropertyValue('--muted').trim(),line=css.getPropertyValue('--chart-line').trim(),surface=css.getPropertyValue('--surface').trim();return {animation:!matchMedia('(prefers-reduced-motion: reduce)').matches,textStyle:{fontFamily:'IBM Plex Sans, Arial, sans-serif',color:muted,fontSize:12},aria:{enabled:true,label:{description:t(chartLabels[id])}},backgroundColor:surface,tooltip:{backgroundColor:surface,borderColor:line,confine:true,textStyle:{color:css.getPropertyValue('--text').trim()}}};}
 function chart(id){return charts[id]??(charts[id]=echarts.init($(id),null,{renderer:'svg'}));}
 function tooltipRows(items,value){return items.map(p=>`<div style="margin:5px 0"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${p.color};margin-right:7px"></span>${escape(p.seriesName)} <b>${escape(value(p))}</b></div>`).join('');}
@@ -158,6 +174,7 @@ function renderMacroCharts() {
 }
 function renderWeights() {
   if(activeTab!=='portfolio')return;
+  if(current.weights.some(w=>w< -1e-8)){ $('weights-chart').style.height='350px';chart('weights-chart').resize();chart('weights-chart').setOption({...baseChart('weights-chart'),...signedWeightsOption(indicatorNames(),current.weights,colors,baseChart().textStyle.color)},true);return;}
   const ps=[current];
   const cols=Math.min(3,ps.length,Math.max(1,Math.floor($('weights-chart').clientWidth/190))),rows=Math.ceil(ps.length/cols),height=ps.length===1?290:rows*230;
   weightsColumns=cols;
@@ -171,7 +188,7 @@ function savePortfolio() {
   const id='p'+(++sequence),suffix=current.mode==='markowitz'?' · λ = '+current.settings.lambda:current.mode==='risk'?t(' · цель ')+percent(current.settings.targetReturn):current.mode==='return'?t(' · риск ≤ ')+percent(current.settings.targetRisk):'';
   const name=portfolioName(current)+suffix+' #'+sequence;
   const color=colors.slice(1).find(color=>!saved.some(p=>p.color===color));
-  saved.push({...current,compared:true,id,name:current.name,ordinal:sequence,initial:false,color,weights:[...current.weights],visible:true});
+  saved.push({...current,snapshot:{data,model,frontier:optimizer.frontier},compared:true,id,name:current.name,ordinal:sequence,initial:false,color,weights:[...current.weights],visible:true});
   renderComparison();syncReportSelector();renderCharts();message('Портфель «{name}» добавлен. Выберите другой критерий и рассчитайте следующий.',false,{name,portfolioId:id});
   return {id,name};
 }
@@ -223,7 +240,7 @@ function exportResults() {
   add([[t('Дата'),...indicatorNames()],...model.returns.map((r,i)=>[model.dates[i+1],...r])],t('Реальные доходности'));
   const macro=macroSeries(data);
   add([[t('Дата'),t('Накопленная инфляция'),t('Инфляция за месяц'),t('Инфляция год к году'),t('М2, млрд ₽')],...macro.dates.map((date,i)=>[date,macro.accumulatedInflation[i],macro.monthlyInflation[i],macro.annualInflation[i],macro.moneySupply[i]])],t('Инфляция и М2'));
-  add([[t('Параметр'),t('Значение')],[t('Источник'),t(data.source)],[t('Периодов в год'),model.frequency],[t('Начальный капитал, ₽'),capital],[t('Номинальная ставка'),current.settings.nominalRf],[t('Реальная безрисковая ставка'),rf],[t('Годовая инфляция'),model.inflation],[t('М2'),t('Макропоказатель; исключён из инвестиционных весов')],[t('Формула доходности'),t('(P_t/P_(t-1))/(ИПЦ_t/ИПЦ_(t-1))-1')],[t('Ожидаемая доходность'),t('Частота × средняя периодическая доходность')],[t('Ковариация'),t('Частота × выборочная ковариация')],[t('Ребалансировка'),t('Каждый период, без комиссий и налогов')],[t('Проверка прогноза'),t('Кривая построена на обучающей выборке; вневыборочной проверки нет')],...ps.map(p=>[t('Критерий: ')+portfolioName(p),JSON.stringify(p.settings)])],t('Методика'));
+  add([[t('Параметр'),t('Значение')],[t('Источник'),t(data.source)],[t('Периодов в год'),model.frequency],[t('Начальный капитал, ₽'),capital],[t('Номинальная ставка'),current.settings.nominalRf],[t('Реальная безрисковая ставка'),rf],[t('Годовая инфляция'),model.inflation],[t('М2'),t('Макропоказатель; исключён из инвестиционных весов')],[t('Формула доходности'),t('(P_t/P_(t-1))/(ИПЦ_t/ИПЦ_(t-1))-1')],[t('Ожидаемая доходность'),t('Частота × средняя периодическая доходность')],[t('Ковариация'),model.covariance],[t('Сжатие OAS'),model.shrinkage],[t('Ограничения весов'),JSON.stringify(current.settings.constraints)],[t('Ребалансировка'),t('Каждый период, без комиссий и налогов')],[t('Проверка прогноза'),t('Кривая построена на обучающей выборке; вневыборочной проверки нет')],...ps.map(p=>[t('Критерий: ')+portfolioName(p),JSON.stringify(p.settings)])],t('Методика'));
   XLSX.utils.sheet_add_aoa(book.Sheets[t('Методика')],[[t('Период сравнения'),comparisonPeriod?comparisonPeriod.from+' — '+comparisonPeriod.to:t('Вся история')],[t('Базовый портфель'),portfolioName(comparisonPortfolios().find(p=>p.id===baselineId)||current)]],{origin:-1});
   ps.filter(p=>p.snapshot).forEach((p,i)=>{
     const {data:source,model:sourceModel,frontier}=p.snapshot,prefix=t('Портфель')+' '+(i+1)+' ';
@@ -246,7 +263,7 @@ function portfolioName(p) {
 }
 function indicatorNames() {return model.names.map(name=>t(name));}
 function sameCriterion(portfolio,mode,settings) {
-  if(portfolio.snapshot||portfolio.mode!==mode)return false;
+  if(portfolio.mode!==mode||portfolio.snapshot&&portfolio.snapshot.model!==model||JSON.stringify(portfolio.settings.constraints)!==JSON.stringify(settings.constraints)||portfolio.settings.covariance!==settings.covariance)return false;
   const key={markowitz:'lambda',sharpe:'rf',risk:'targetReturn',return:'targetRisk'}[mode];
   return Number.isFinite(portfolio.settings[key])&&Math.abs(portfolio.settings[key]-settings[key])<1e-10;
 }
@@ -254,7 +271,7 @@ function prepareComparison(modesToAdd) {
   if(!current||!optimizer)throw Error('Сначала рассчитайте портфель.');
   return modesToAdd.map(mode=>{
     try {
-      const settings={rf,nominalRf:current.settings.nominalRf,lambda:mode==='markowitz'?numeric('compare-lambda'):3,targetReturn:mode==='risk'?numeric('compare-target-return')/100:.1,targetRisk:mode==='return'?numeric('compare-target-risk')/100:.2};
+      const settings={constraints:current.settings.constraints,covariance:current.settings.covariance,rf,nominalRf:current.settings.nominalRf,lambda:mode==='markowitz'?numeric('compare-lambda'):3,targetReturn:mode==='risk'?numeric('compare-target-return')/100:.1,targetRisk:mode==='return'?numeric('compare-target-risk')/100:.2};
       const solution=optimizer.solve(mode,settings);
       metrics(model,solution.weights,rf,capital);
       return {mode,settings,solution,existing:saved.find(p=>sameCriterion(p,mode,settings))};
@@ -271,7 +288,7 @@ async function addCriteriaToComparison(modesToAdd) {
     for(const item of planned) {
       if(item.existing){item.existing.visible=true;continue;}
       const ordinal=++sequence,color=colors.slice(1).find(color=>!saved.some(p=>p.color===color));
-      const portfolio={...item.solution,id:'p'+ordinal,name:modes[item.mode],mode:item.mode,settings:{...item.settings},ordinal,initial:false,color,visible:true,weights:[...item.solution.weights]};
+      const portfolio={...item.solution,snapshot:{data,model,frontier:optimizer.frontier},id:'p'+ordinal,name:modes[item.mode],mode:item.mode,settings:{...item.settings},ordinal,initial:false,color,visible:true,weights:[...item.solution.weights]};
       saved.push(portfolio);item.existing=portfolio;
     }
     renderComparison();syncReportSelector();renderCharts();
@@ -340,6 +357,14 @@ $('theme-button').addEventListener('click',()=>{
   refreshPreferences();
 });
 
+$('position-mode').addEventListener('change',()=>{const short=$('position-mode').value==='short';$('min-weight').min=short?'-100':'0';$('min-weight').value=short?String(-Math.min(30,numeric('max-weight'))):'0';});
+function changeAssets(next){
+  const previous=excludedAssets;excludedAssets=next;
+  try{calculate({quiet:true});$('asset-selection-status').textContent=t('Активы обновлены. Текущий портфель пересчитан.');}
+  catch(error){excludedAssets=previous;render();$('asset-selection-status').textContent=translateError(error.message);}
+}
+$('asset-toggles').addEventListener('change',event=>{if(event.target.dataset.asset===undefined)return;const index=Number(event.target.dataset.asset);changeAssets(event.target.checked?excludedAssets.filter(i=>i!==index):[...excludedAssets,index].sort((a,b)=>a-b));});
+$('include-all-assets').addEventListener('click',()=>changeAssets([]));
 $('mode').addEventListener('change',modeFields);
 $('optimization-form').addEventListener('submit',guarded(async e=>{e.preventDefault();$('calculate-button').disabled=true;$('save-button').disabled=true;try{await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));calculate();}finally{$('calculate-button').disabled=!current;$('save-button').disabled=!current;}}));
 $('save-button').addEventListener('click',guarded(savePortfolio));
@@ -371,7 +396,7 @@ $('method-button').addEventListener('click',()=>$('method-dialog').showModal());
 $('close-method').addEventListener('click',()=>$('method-dialog').close());
 $('method-dialog').addEventListener('click',e=>{if(e.target===$('method-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
 new ResizeObserver(resizeVisibleCharts).observe(document.querySelector('.app-main'));
-backtestView=createBacktestView(()=>current?{data,frequency:model.frequency,capital,nominalRf:current.settings.nominalRf}:null);
+backtestView=createBacktestView(()=>current?{data,frequency:model.frequency,capital,nominalRf:current.settings.nominalRf,constraints:current.settings.constraints,covariance:current.settings.covariance}:null);
 importView=createDataImportView({applyDataset,onUnavailable:()=>{if(!current){$('data-status').textContent=t('Нет данных');$('data-badge').textContent=t('Нет данных');setReady(false);message('Статистика недоступна. Откройте «Данные» и повторите загрузку.',true);}}});
 comparisonControls=createComparisonControls({getState:comparisonState,onPeriod:setComparisonPeriod,onRestore:restoreComparisonState,onBaseline:id=>{baselineId=id;renderComparison();},onHighlight:value=>{highlightComparison=value;renderComparison();},portfolioName,message});
 modeFields();setReady(false);
