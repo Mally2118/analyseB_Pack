@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {estimate,createOptimizer,metrics,dot,variance} from '../dist/engine.js';
-import {weightBounds} from '../dist/constrained-optimizer.js';
+import {weightBounds,exposures,exposureLimits} from '../dist/constrained-optimizer.js';
 import {runBacktest,runRollingBacktest} from '../dist/backtest.js';
 import {serializeComparison,restoreComparison,evaluatePortfolio,reportPortfolio} from '../dist/comparison.js';
 import {officialData} from './fixtures.mjs';
@@ -20,14 +20,15 @@ test('short positions improve the objective when allowed and preserve net capita
 });
 test('all criteria and frontier obey minimum, maximum and exclusions; constraints reject impossible cases',()=>{
  const m=estimate(officialData(),12,{covariance:'oas'}),constraints={short:true,minWeight:-.2,maxWeight:.4,excluded:[0,2,4]},o=createOptimizer(m,constraints),b=weightBounds(9,constraints);
- for(const p of [...o.frontier,...['markowitz','sharpe','risk','return'].map(mode=>o.solve(mode,{targetReturn:o.global.return,targetRisk:Math.max(.5,o.global.risk)}))]){check(p.weights,b);for(const i of constraints.excluded)assert.equal(p.weights[i],0);}
+ for(const p of [...o.frontier,...['markowitz','sharpe','risk','return'].map(mode=>o.solve(mode,{targetReturn:o.global.return,targetRisk:Math.max(.5,o.global.risk)}))]){check(p.weights,b);assert.ok(exposures(p.weights).short<=.25+1e-8);assert.ok(exposures(p.weights).gross<=1.5+1e-8);for(const i of constraints.excluded)assert.equal(p.weights[i],0);}
  assert.throws(()=>createOptimizer(m,{minWeight:.12}),/несовместимы/);assert.throws(()=>createOptimizer(m,{maxWeight:.1}),/несовместимы/);assert.throws(()=>createOptimizer(m,{minWeight:-.1}),/границы/);assert.throws(()=>createOptimizer(m,{excluded:[0,0]}),/границы/);
- const allFixed=createOptimizer(m,{minWeight:1/9,maxWeight:1/9});check(allFixed.global.weights,allFixed.bounds);close(allFixed.frontier.at(-1).return,allFixed.global.return);
+ assert.throws(()=>createOptimizer(m,{minWeight:1/9,maxWeight:1/9}),/меньше максимального/);
+ const allFixed=createOptimizer(m,{minWeight:0,maxWeight:1/9});check(allFixed.global.weights,allFixed.bounds);close(allFixed.frontier.at(-1).return,allFixed.global.return);
 });
 test('bounded solver cannot be beaten by independent random feasible portfolios',()=>{
  const m=estimate(officialData(),12,{covariance:'oas'}),options={short:true,minWeight:-.2,maxWeight:.4,excluded:[3]},o=createOptimizer(m,options),solution=o.solve('markowitz',{lambda:2});
  let seed=44;const random=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/2**32);
- for(let k=0;k<20000;k++){const w=Array.from({length:9},()=>-.2+random()*.6);w[3]=0;w[8]=1-w.slice(0,8).reduce((a,b)=>a+b,0);if(w[8]<-.2||w[8]>.4)continue;assert.ok(dot(w,m.mu)-2*variance(w,m.stabilized)<=solution.return-2*solution.objective+1e-7);}
+ for(let k=0;k<20000;k++){const w=Array.from({length:9},()=>-.2+random()*.6);w[3]=0;w[8]=1-w.slice(0,8).reduce((a,b)=>a+b,0);if(w[8]<-.2||w[8]>.4||exposures(w).short>.25)continue;assert.ok(dot(w,m.mu)-2*variance(w,m.stabilized)<=solution.return-2*solution.objective+1e-7);}
 });
 test('OAS implements the empirical-covariance formula, regularizes singular series and preserves means',()=>{
  const data=officialData(),sample=estimate(data),oas=estimate(data,12,{covariance:'oas'});assert.deepEqual(oas.mu,sample.mu);assert.deepEqual(oas.returns,sample.returns);assert.ok(oas.shrinkage>0&&oas.shrinkage<=1);

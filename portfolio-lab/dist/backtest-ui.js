@@ -1,3 +1,4 @@
+import {exposures,exposureLimits} from './constrained-optimizer.js';
 import {runBacktest,runRollingBacktest} from './backtest.js';
 import {t,locale,translateError} from './i18n.js';
 
@@ -42,6 +43,7 @@ export function createBacktestView(getState) {
     $('backtest-context').textContent=t('Общие параметры из последнего расчёта: {capital}, ставка {rate}, {frequency}.',{
       capital:money(state.capital),rate:percent(state.nominalRf),frequency:t({12:'Месячные данные',252:'Дневные данные',1:'Годовые данные'}[state.frequency])
     })+' '+t('Границы: {min} … {max}; исключено: {count}; ковариация: {method}.',{min:percent(state.constraints?.minWeight??0),max:percent(state.constraints?.maxWeight??1),count:state.constraints?.excluded?.length||0,method:state.covariance==='oas'?'OAS':t('Выборочная')});
+    if(state.constraints?.short){const limits=exposureLimits(state.constraints);$('backtest-context').textContent+=' '+t('Лимиты: gross ≤ {gross}, short ≤ {short}.',{gross:percent(limits.grossLimit),short:percent(limits.shortLimit)});}
   }
   function name(portfolio) {
     const mode=portfolio.mode,base=t(modes[mode]);
@@ -77,8 +79,8 @@ export function createBacktestView(getState) {
     $('rolling-ledger').hidden=result.kind!=='rolling';
     $('backtest-weight-note').textContent=result.kind==='rolling'?t('Rolling: обучение пересчитывается в каждом окне. В таблице показана средняя обучающая доходность, взвешенная по длине проверки; диаграмма весов показывает последнее окно.'):t('Веса определены на обучении; доли восстанавливаются каждый период, без комиссий.');
     $('rolling-ledger-body').innerHTML=result.kind==='rolling'?portfolios().flatMap(portfolio=>portfolio.folds.map(fold=>{
-      const long=fold.weights.reduce((a,w)=>a+Math.max(0,w),0),short=fold.weights.reduce((a,w)=>a+Math.max(0,-w),0);
-      return `<tr><td>${escape(name(portfolio))}</td><td>${fold.trainFrom} — ${fold.trainTo}</td><td>${fold.testFrom} — ${fold.testTo}</td><td>${percent(long)} / ${percent(short)}</td><td>${fold.weights.map((w,i)=>escape(t(result.trainModel.names[i]))+': '+percent(w)).join('; ')}</td></tr>`;
+      const e=exposures(fold.weights);
+      return `<tr><td>${escape(name(portfolio))}</td><td>${fold.trainFrom} — ${fold.trainTo}</td><td>${fold.testFrom} — ${fold.testTo}</td>${[e.long,e.short,e.net,e.gross].map(value=>`<td>${percent(value)}</td>`).join('')}<td>${fold.weights.map((w,i)=>escape(t(result.trainModel.names[i]))+': '+percent(w)).join('; ')}</td></tr>`;
     })).join(''):'';
     $('backtest-results').hidden=false;$('backtest-export-button').disabled=false;
     $('backtest-train-period').textContent=result.trainDates[0]+' — '+result.trainDates.at(-1);
@@ -108,6 +110,7 @@ export function createBacktestView(getState) {
     if(!result)return;
     const ps=portfolios(),book=XLSX.utils.book_new(),add=(rows,title)=>XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(rows),t(title));
     add([[t('Портфель'),t('Доходность на обучении / год'),t('Фактическая средняя доходность / год'),t('Итоговая доходность'),'CAGR',t('Волатильность'),t('Шарп'),t('Макс. просадка'),t('Капитал на конец периода')],...ps.map(portfolio=>{const s=portfolio.testStats;return [name(portfolio),portfolio.trainingStats.expectedReturn,s.realizedReturn,s.totalReturn,s.cagr,s.risk,s.sharpe,s.maxDrawdown,s.finalCapital];})], 'Показатели');
+    add([[t('Портфель'),'Long exposure','Short exposure','Net exposure','Gross exposure'],...ps.map(p=>{const e=exposures(p.weights);return [name(p),e.long,e.short,e.net,e.gross];})], 'Экспозиции');
     add([[t('Индикатор'),...ps.map(name)],...result.trainModel.names.map((value,index)=>[t(value),...ps.map(portfolio=>portfolio.weights[index])])],'Веса');
     add([[t('Дата'),...ps.map(name)],...result.testDates.map((date,index)=>[date,...ps.map(portfolio=>portfolio.testStats.wealth[index]*result.capital)])],'Проверочный капитал');
     add([[t('Дата'),...ps.map(name)],...result.testDates.map((date,index)=>[date,...ps.map(portfolio=>portfolio.testStats.drawdown[index])])],'Просадки');

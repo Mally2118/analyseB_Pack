@@ -37,7 +37,7 @@ export function createComparisonControls({getState,onPeriod,onRestore,onBaseline
   $('comparison-set-open').addEventListener('click',guard(()=>{
     const entry=readComparisonSets(localStorage).find(entry=>entry.id===selectedSet);
     if(!entry)throw Error('Сохранённый набор не найден.');
-    let restored;try{restored=restoreComparison(entry.payload);}catch{throw Error('Сохранённый набор повреждён. Текущее сравнение сохранено.');}
+    let restored;try{restored=restoreComparison(entry.payload);}catch(error){if(error.message.startsWith('Сохранённый short-портфель'))throw error;throw Error('Сохранённый набор повреждён. Текущее сравнение сохранено.');}
     onRestore(restored);message('Набор открыт. Данные, веса, настройки и период восстановлены.');
   }));
   $('comparison-set-delete').addEventListener('click',guard(()=>{

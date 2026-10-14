@@ -1,7 +1,7 @@
 import {estimate,createOptimizer,metrics} from './engine.js';
 import {t,locale,language,theme,setLanguage,setTheme,captureStaticTranslations,translateStatic,translateError} from './i18n.js';
 import {renderReport,resizeReport,getReportChart} from './report-charts.js';
-import {weightBounds} from './constrained-optimizer.js';
+import {weightBounds,exposures,exposureLimits} from './constrained-optimizer.js';
 import {signedWeightsOption} from './weight-charts.js';
 import {createBacktestView} from './backtest-ui.js';
 import {createDataImportView} from './data-import-ui.js';
@@ -30,17 +30,31 @@ let backtestView,importView,comparisonControls;
 let comparisonPeriod=null,baselineId='current',highlightComparison=true;
 function message(text,error=false,values={}){lastMessage={text,error,values};const portfolio=values.portfolioId&&saved.find(p=>p.id===values.portfolioId),details={...values,...portfolio?{name:portfolioName(portfolio)}:{},...values.criterionMode?{criterion:t(modes[values.criterionMode]),reason:translateError(values.reason)}:{}};$('message').textContent=error&&!values.criterionMode?translateError(text):t(text,details);$('message').classList.toggle('error',error);$('message').hidden=false;}
 function modeFields(){
+  positionFields();
   const mode=$('mode').value;$('mode-description').textContent=t(descriptions[mode]);
   for(const [id,criterion] of [['lambda','markowitz'],['target-return','risk'],['target-risk','return']]) {
     $(id+'-field').hidden=mode!==criterion;$(id).disabled=mode!==criterion;
   }
 }
-function numeric(id){const value=$(id).value.trim();if(!value||!Number.isFinite(Number(value)))throw Error('Заполните числовой параметр: '+parameterLabels.get(id));return Number(value);}
-function constraintsFromInputs(){return {short:$('position-mode').value==='short',minWeight:numeric('min-weight')/100,maxWeight:numeric('max-weight')/100,excluded:[...excludedAssets]};}
+function numeric(id){const value=$(id).value.trim();if(!value||!Number.isFinite(Number(value)))throw Error('Заполните числовой параметр: '+($(id).labels?.[0]?.textContent||parameterLabels.get(id)));return Number(value);}
+function constraintsFromInputs(){
+  const short=$('position-mode').value==='short';
+  return {short,minWeight:numeric('min-weight')/100,maxWeight:numeric('max-weight')/100,excluded:[...excludedAssets],...short?{grossLimit:numeric('gross-limit')/100,shortLimit:numeric('short-limit')/100}:{}};
+}
+function positionFields(){
+  const short=$('position-mode').value==='short';$('short-exposure-fields').hidden=!short;
+  for(const id of ['gross-limit','short-limit'])$(id).disabled=!short;
+  $('min-weight-label').textContent=t(short?'Минимальный вес одного актива, %':'Минимальная доля актива, %');
+  const gross=Number($('gross-limit').value),limit=Number($('short-limit').value),warnings=[];
+  if(short&&gross===100)warnings.push(t('При валовой экспозиции 100% и сумме весов 100% короткие позиции фактически невозможны.'));
+  if(short&&$('short-limit').value.trim()&&limit===0)warnings.push(t('Лимит short равен 0%: короткие позиции запрещены.'));
+  $('exposure-limit-warning').textContent=warnings.join(' ');$('exposure-limit-warning').hidden=!warnings.length;
+}
 function calculationSignature(covariance,constraints){return JSON.stringify({frequency:12,covariance,constraints});}
+const inputPercent=value=>Number((value*100).toFixed(10));
 function restoreStrategyInputs(settings){
   const constraints=settings.constraints||{short:false,minWeight:0,maxWeight:1,excluded:[]};
-  excludedAssets=[...(constraints.excluded||[])];$('position-mode').value=constraints.short?'short':'long';$('min-weight').min=constraints.short?'-100':'0';$('min-weight').value=constraints.minWeight*100;$('max-weight').value=constraints.maxWeight*100;$('covariance-method').value=settings.covariance||'sample';
+  excludedAssets=[...(constraints.excluded||[])];$('position-mode').value=constraints.short?'short':'long';$('min-weight').min=constraints.short?'-100':'0';$('min-weight').value=inputPercent(constraints.minWeight??(constraints.short?-.3:0));$('max-weight').value=inputPercent(constraints.maxWeight??1);$('covariance-method').value=settings.covariance||'sample';$('gross-limit').value=inputPercent(constraints.grossLimit??1.5);$('short-limit').value=inputPercent(constraints.shortLimit??.25);positionFields();
 }
 function calculate({quiet=false}={}) {
   if(!data)throw Error('Сначала загрузите официальную статистику.');
@@ -87,9 +101,9 @@ function restoreComparisonState(state){
 function render() {
   if(!current)return;
   setReady(true);
-  const s=stat(current),long=current.weights.reduce((sum,w)=>sum+Math.max(0,w),0),short=current.weights.reduce((sum,w)=>sum+Math.max(0,-w),0);
+  const s=stat(current),e=exposures(current.weights);
   $('position-summary').textContent=t(current.settings.constraints?.short?'Короткие продажи':'Без коротких продаж');
-  $('exposure-summary').textContent=t('Длинные: {long} · короткие: {short} · общий объём: {gross}',{long:percent(long),short:percent(short),gross:percent(long+short)});
+  for(const key of ['long','short','net','gross'])$(key+'-exposure').textContent=percent(e[key]);
   $('covariance-summary').textContent=model.covariance==='oas'?t('OAS · сжатие {rate}',{rate:percent(model.shrinkage)}):t('Выборочная ковариация');
   $('asset-toggles').innerHTML=indicatorNames().map((name,i)=>`<label><input type="checkbox" data-asset="${i}" ${excludedAssets.includes(i)?'':'checked'}><span>${escape(name)}</span></label>`).join('');
   $('data-badge').textContent=t('Официальные данные');
@@ -174,7 +188,7 @@ function renderMacroCharts() {
 }
 function renderWeights() {
   if(activeTab!=='portfolio')return;
-  if(current.weights.some(w=>w< -1e-8)){ $('weights-chart').style.height='350px';chart('weights-chart').resize();chart('weights-chart').setOption({...baseChart('weights-chart'),...signedWeightsOption(indicatorNames(),current.weights,colors,baseChart().textStyle.color)},true);return;}
+  if(current.settings.constraints?.short||current.weights.some(w=>w< -1e-8)){ $('weights-chart').style.height='350px';chart('weights-chart').resize();chart('weights-chart').setOption({...baseChart('weights-chart'),...signedWeightsOption(indicatorNames(),current.weights,colors,baseChart().textStyle.color)},true);return;}
   const ps=[current];
   const cols=Math.min(3,ps.length,Math.max(1,Math.floor($('weights-chart').clientWidth/190))),rows=Math.ceil(ps.length/cols),height=ps.length===1?290:rows*230;
   weightsColumns=cols;
@@ -234,6 +248,7 @@ function exportResults() {
   const stats=ps.map(p=>calculateComparisonStat(p,comparisonContext(),comparisonPeriod)),dateIndexes=portfolioModels.map(m=>new Map(m.dates.map((date,i)=>[date,i])));
   add([[t('Дата'),...ps.map(p=>portfolioName(p))],...dates.map(date=>[date,...stats.map((s,i)=>{const index=dateIndexes[i].get(date);return index===undefined?null:s.wealth[index]*capital;})])],t('Реальный капитал'));
   add([[t('Дата'),...ps.map(p=>portfolioName(p))],...dates.map(date=>[date,...stats.map((s,i)=>{const index=dateIndexes[i].get(date);return index===undefined?null:s.drawdown[index];})])],t('Просадки'));
+  add([[t('Портфель'),'Long exposure','Short exposure','Net exposure','Gross exposure',t('Максимальная валовая экспозиция, %'),t('Максимальная суммарная короткая позиция, %')],...ps.map(p=>{const e=exposures(p.weights),limits=exposureLimits(p.settings.constraints);return [portfolioName(p),e.long,e.short,e.net,e.gross,limits.grossLimit*100,limits.shortLimit*100];})],t('Экспозиции'));
   add([[t('Риск / год'),t('Ожид. доходность / год'),...indicatorNames()],...optimizer.frontier.map(p=>[p.risk,p.return,...p.weights])],t('Эффективная граница'));
   add([[t('Источник'),t('Ссылка'),t('Методика')],...(data.provenance||[]).map(source=>[t(source.name),source.url,t(source.method)])],t('Источники'));
   add([[t('Дата'),t('ИПЦ'),...data.names.map(n=>t(n))],...data.rows.map(r=>[r.date,r.cpi,...r.values])],t('Исходные данные'));
@@ -357,7 +372,8 @@ $('theme-button').addEventListener('click',()=>{
   refreshPreferences();
 });
 
-$('position-mode').addEventListener('change',()=>{const short=$('position-mode').value==='short';$('min-weight').min=short?'-100':'0';$('min-weight').value=short?String(-Math.min(30,numeric('max-weight'))):'0';});
+$('position-mode').addEventListener('change',()=>{const short=$('position-mode').value==='short';$('min-weight').min=short?'-100':'0';$('min-weight').value=short?String(-Math.min(30,numeric('max-weight'))):'0';positionFields();});
+for(const id of ['gross-limit','short-limit'])$(id).addEventListener('input',positionFields);
 function changeAssets(next){
   const previous=excludedAssets;excludedAssets=next;
   try{calculate({quiet:true});$('asset-selection-status').textContent=t('Активы обновлены. Текущий портфель пересчитан.');}
