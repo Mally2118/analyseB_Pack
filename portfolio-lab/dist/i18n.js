@@ -1,5 +1,13 @@
 // Russian source strings are stable translation keys; user-provided names stay unchanged.
 const english = {
+  "ЦБ: М2, металлы и валюты. Росстат: ИПЦ. Мосбиржа: IMOEX, RGBITR, акции Сбербанка и Лукойла. Загружаются только опубликованные наблюдения.": "CBR: M2, metals and currencies. Rosstat: CPI. MOEX: IMOEX, RGBITR, Sberbank and LUKOIL shares. Only published observations are loaded.",
+  "М2, четыре металла, две валюты, IMOEX, RGBITR, акции SBER и LKOH. ИПЦ учитывается автоматически.": "M2, four metals, two currencies, IMOEX, RGBITR, SBER and LKOH shares. CPI is included automatically.",
+  "М2 — отдельный макропоказатель. Оптимизация использует десять рядов: четыре металла, две валюты, IMOEX, RGBITR и акции Сбербанка (SBER) и Лукойла (LKOH). Даты — конец месяца; ИПЦ — накопленный индекс Росстата. SBER, LKOH и IMOEX не включают дивиденды; RGBITR включает купоны. Общая история сохранена с декабря 2018 года.": "M2 is a separate macro indicator. Optimization uses ten series: four metals, two currencies, IMOEX, RGBITR, Sberbank (SBER) and LUKOIL (LKOH) shares. Dates are month ends; CPI is the cumulative Rosstat index. SBER, LKOH and IMOEX exclude dividends; RGBITR includes coupons. The common history is preserved from December 2018.",
+  "Закрытие месячной свечи: SBER и LKOH — рубли за обыкновенную акцию, IMOEX и RGBITR — пункты. SBER, LKOH и IMOEX без дивидендов; RGBITR с купонным доходом.": "Monthly candle close: SBER and LKOH in rubles per ordinary share, IMOEX and RGBITR in points. SBER, LKOH and IMOEX exclude dividends; RGBITR includes coupon income.",
+  "Сбербанк / SBER": "Sberbank / SBER",
+  "Лукойл / LKOH": "LUKOIL / LKOH",
+  "Московская биржа — SBER": "Moscow Exchange — SBER",
+  "Московская биржа — LKOH": "Moscow Exchange — LKOH",
   "Минимальный вес одного актива, %": "Minimum weight per asset, %",
   "Максимальная валовая экспозиция, %": "Maximum gross exposure, %",
   "Максимальная суммарная короткая позиция, %": "Maximum total short exposure, %",

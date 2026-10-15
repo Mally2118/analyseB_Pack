@@ -4,9 +4,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 const CBR = 'https://www.cbr.ru';
 const ROSSTAT = 'https://www.rosstat.gov.ru';
 const MOEX = 'https://iss.moex.com';
-export const MOEX_INDICES = ['IMOEX', 'RGBITR', 'RUCBTRNS'];
+const MOEX_SERIES = [
+  { id: 'SBER', name: 'Сбербанк / SBER', market: 'shares/boards/TQBR' },
+  { id: 'IMOEX', name: 'Индекс Мосбиржи / IMOEX', market: 'index' },
+  { id: 'RGBITR', name: 'ОФЗ / RGBITR', market: 'index' },
+  { id: 'LKOH', name: 'Лукойл / LKOH', market: 'shares/boards/TQBR' }
+];
 export const OFFICIAL_FIRST_MONTH = '2018-12';
-const MOEX_METHOD = 'Закрытие месячной свечи, рублёвые индексы в пунктах. IMOEX без дивидендов; RGBITR и RUCBTRNS с купонным доходом.';
+const MOEX_METHOD = 'Закрытие месячной свечи: SBER и LKOH — рубли за обыкновенную акцию, IMOEX и RGBITR — пункты. SBER, LKOH и IMOEX без дивидендов; RGBITR с купонным доходом.';
 const MONEY_URL = `${CBR}/vfs/statistics/credit_statistics/monetary_agg.xlsx`;
 const CPI_PAGE = `${ROSSTAT}/statistics/price`;
 const TTL = 6 * 60 * 60 * 1000;
@@ -253,38 +258,37 @@ export function assembleMarketData(months, money, cpiRates, series, cpiURL, down
     source: 'ЦБ · Росстат · MOEX ISS', period: { from: months[0], to: months.at(-1) }, downloadedAt,
     provenance: [
       { name: 'Банк России — М2', url: MONEY_URL, indicators: ['Рублёвая масса М2'], method: 'Млрд рублей. Остаток на 1-е число следующего месяца отнесён к концу отчётного месяца.' },
-      { name: 'Банк России — валюты и металлы', url: `${CBR}/development/sxml/`, indicators: series.slice(0, 7).map(s => s.name), method: 'Последняя опубликованная котировка каждого месяца. Валюты: рублей за 1 единицу; металлы: рублей за грамм.' },
+      { name: 'Банк России — валюты и металлы', url: `${CBR}/development/sxml/`, indicators: series.slice(0, 6).map(s => s.name), method: 'Последняя опубликованная котировка каждого месяца. Валюты: рублей за 1 единицу; металлы: рублей за грамм.' },
       { name: 'Росстат — месячный ИПЦ', url: cpiURL, indicators: ['ИПЦ'], method: 'Общий ИПЦ по России, к концу предыдущего месяца. Накопленный индекс: 100 на первом наблюдении конца месяца, далее произведение месячных индексов.' },
-      { name: 'Московская биржа — ISS', url: 'https://www.moex.com/a2193', indicators: series.slice(7).map(s => s.name), method: MOEX_METHOD }
+      { name: 'Московская биржа — ISS', url: 'https://www.moex.com/a2193', indicators: series.slice(6).map(s => s.name), method: MOEX_METHOD }
     ],
-    notes: ['М2 — макроэкономический индикатор, а не покупаемый актив.', 'Набор содержит четыре драгоценных металла, три валюты и три рублёвых биржевых индекса.', 'История RUCBTRNS в MOEX ISS начинается с декабря 2018 года; общий набор доступен с этого месяца.', 'Все доходности приложение корректирует на накопленный ИПЦ. Пропуски не заполняются вымышленными значениями.']
+    notes: ['М2 — макроэкономический индикатор, а не покупаемый актив.', 'Набор содержит четыре драгоценных металла, две валюты, два биржевых индекса и акции Сбербанка и Лукойла.', 'Цены SBER и LKOH не включают дивиденды.', 'Все доходности приложение корректирует на накопленный ИПЦ. Пропуски не заполняются вымышленными значениями.']
   };
 }
 
 export async function loadMarketData(from, to, { fetchImpl = fetch, now = new Date(), useCache = true } = {}) {
   const months = validatePeriod(from, to, now);
-  if (from < OFFICIAL_FIRST_MONTH) throw new ProviderError('RUCBTRNS: история в MOEX ISS начинается с декабря 2018 года. Выберите первый месяц не раньше 2018-12.', { status: 422, code: 'MISSING_DATA', missingMonth: from });
   const task = async () => {
     const get = (url, label) => useCache ? cached(sourceCache, url, 64, () => download(url, label, fetchImpl)) : download(url, label, fetchImpl);
     const firstDate = `01/${from.slice(5)}/${from.slice(0, 4)}`;
     const lastDate = monthEnd(to).split('-').reverse().join('/');
     const range = `date_req1=${firstDate}&date_req2=${lastDate}`;
-    const currencyCodes = ['R01235', 'R01239', 'R01375'];
-    const moexURL = id => `${MOEX}/iss/engines/stock/markets/index/securities/${id}/candles.json?from=${from}-01&till=${monthEnd(to)}&interval=31&iss.meta=off&candles.columns=begin,end,close`;
+    const currencyCodes = ['R01235', 'R01239'];
+    const moexURL = ({id, market}) => `${MOEX}/iss/engines/stock/markets/${market}/securities/${id}/candles.json?from=${from}-01&till=${monthEnd(to)}&interval=31&iss.meta=off&candles.columns=begin,end,close`;
     const [moneyBuffer, cpiHTML, metalsBuffer, currencyBuffers, moexBuffers] = await Promise.all([
       get(MONEY_URL, 'Банк России — М2'), get(CPI_PAGE, 'Росстат'),
       get(`${CBR}/scripts/xml_metall.asp?${range}`, 'Банк России — металлы'),
       Promise.all(currencyCodes.map(code => get(`${CBR}/scripts/XML_dynamic.asp?${range}&VAL_NM_RQ=${code}`, 'Банк России — валюты'))),
-      Promise.all(MOEX_INDICES.map(id => get(moexURL(id), `Московская биржа — ${id}`)))
+      Promise.all(MOEX_SERIES.map(security => get(moexURL(security), `Московская биржа — ${security.id}`)))
     ]);
     const cpiURL = discoverCPIURL(cpiHTML.toString('utf8'));
     const cpiBuffer = await get(cpiURL, 'Росстат — файл ИПЦ');
     const metals = parseMetalXML(metalsBuffer.toString('utf8'));
-    const names = ['Золото', 'Серебро', 'Платина', 'Палладий', 'Доллар США', 'Евро', 'Юань', 'Индекс Мосбиржи / IMOEX', 'ОФЗ / RGBITR', 'Корпоративные облигации / RUCBTRNS'];
+    const names = ['Золото', 'Серебро', 'Платина', 'Палладий', 'Доллар США', 'Евро', ...MOEX_SERIES.map(security => security.name)];
     const values = [
       ...['1', '2', '3', '4'].map(code => monthlyLast(metals.get(code))),
       ...currencyBuffers.map(buffer => monthlyLast(parseCurrencyXML(buffer.toString('utf8')))),
-      ...moexBuffers.map((buffer, i) => parseMOEXCandles(JSON.parse(buffer.toString('utf8')), MOEX_INDICES[i]))
+      ...moexBuffers.map((buffer, i) => parseMOEXCandles(JSON.parse(buffer.toString('utf8')), MOEX_SERIES[i].id))
     ];
     return assembleMarketData(months, parseMoneyTable(workbookTable(moneyBuffer)), parseCPITable(workbookTable(cpiBuffer, '01')), names.map((name, i) => ({ name, values: values[i] })), cpiURL);
   };

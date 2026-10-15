@@ -22,7 +22,9 @@ test('startup uses published source observations and excludes M2 from every port
   await expect(page.locator('#data-badge')).toHaveText('Официальные данные');
   await expect(page.locator('#mode')).toHaveValue('markowitz');
   await expect(page.locator('#indicators-table tbody tr')).toHaveCount(model.names.length);
-  await expect(page.locator('#indicators-table tbody')).toContainText('Корпоративные облигации / RUCBTRNS');
+  await expect(page.locator('#indicators-table tbody')).toContainText('Лукойл / LKOH');
+  await expect(page.locator('#indicators-table tbody')).toContainText('Сбербанк / SBER');
+  expect(await page.locator('#indicators-table tbody').textContent()).not.toMatch(/Юань|RUCBTRNS|YDEX/);
   expect(await page.locator('#indicators-table tbody').textContent()).not.toMatch(/М2/);
   expect((await chart(page,'equity-chart')).series[0].data).toEqual(metrics(model,solution.weights,rf).wealth.map(v=>(v-1)*100));
   for(const mode of ['markowitz','sharpe','risk','return']){
@@ -58,12 +60,14 @@ test('comparison, removal, common period, saved sets and Excel keep ten investab
   await expect(page.locator('#message')).not.toHaveClass(/error/);
   const downloaded=await download(page,testInfo,'#export-button','official-comparison.xlsx');const book=XLSX.read(downloaded.bytes,{type:'buffer'});
   const weights=XLSX.utils.sheet_to_json(book.Sheets['Веса'],{header:1});expect(weights).toHaveLength(model.names.length+1);
-  expect(weights.at(-1)[0]).toContain('RUCBTRNS');
+  expect(weights.at(-1)[0]).toContain('LKOH');
+  expect(weights.map(row=>row[0])).toContain('Сбербанк / SBER');
   expect(weights.slice(1).some(row=>/М2/.test(row[0]))).toBeFalsy();
   for(let i=1;i<weights[0].length;i++)expect(weights.slice(1).reduce((s,row)=>s+row[i],0)).toBeCloseTo(1,8);
   expect(book.SheetNames).toContain('Инфляция и М2');
   const source=XLSX.utils.sheet_to_json(book.Sheets['Исходные данные'],{header:1});expect(source[0][2]).toContain('М2');
-  expect(source[0].at(-1)).toContain('RUCBTRNS');
+  expect(source[0].at(-1)).toContain('LKOH');
+  expect(source[0]).toContain('Сбербанк / SBER');
   const capital=XLSX.utils.sheet_to_json(book.Sheets['Реальный капитал'],{header:1});expect(capital[1][0]).toBe(start);expect(capital[1].slice(1)).toEqual(Array(5).fill(1e6));
   const firstId=await page.locator('[data-remove]').first().getAttribute('data-remove');await page.locator('[data-remove="'+firstId+'"]').click();
   await expect(page.locator('#comparison-table tbody tr')).toHaveCount(4);

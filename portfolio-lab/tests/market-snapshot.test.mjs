@@ -73,12 +73,12 @@ test('builder handles a short history with one provider request', async () => {
   assert.equal(snapshot.rows.length, 33);
 });
 
-test('default snapshot starts at the first RUCBTRNS month and carries eleven indicator levels', async () => {
+test('default snapshot starts at the preserved December 2018 month and carries eleven indicator levels', async () => {
   const calls = [];
   const snapshot = await buildMarketSnapshot({now, load: async (from, to) => {
     calls.push([from, to]);
     const data = fixture(from, to);
-    data.names.push('Корпоративные облигации / RUCBTRNS');
+    data.names.push('Лукойл / LKOH');
     data.rows.forEach((row, i) => row.values.push(100 + i));
     return data;
   }});

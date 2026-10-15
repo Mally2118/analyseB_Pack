@@ -59,7 +59,7 @@ test('restoration rejects corrupt weights, invalid sources, duplicate ids, bad s
   }
 });
 
-test('saved comparisons restore legacy nine-asset portfolios alongside the new ten-asset RUCBTRNS portfolio',()=>{
+test('saved comparisons restore legacy nine-asset portfolios alongside the new ten-asset stock portfolio',()=>{
   const legacyData=structuredClone(data);
   legacyData.names.pop();legacyData.rows.forEach(row=>row.values.pop());
   const legacyModel=estimate(legacyData),legacyCurrent={...createOptimizer(legacyModel).solve('markowitz'),id:'current',mode:'markowitz',name:'Ранее сохранённый портфель',settings};
@@ -70,7 +70,7 @@ test('saved comparisons restore legacy nine-asset portfolios alongside the new t
   assert.deepEqual(restored.current.weights,legacyCurrent.weights);
   assert.equal(restored.saved[0].weights.length,10);
   assert.deepEqual(restored.saved[0].weights,current.weights);
-  assert.match(restored.saved[0].snapshot.model.names.at(-1),/RUCBTRNS/);
+  assert.match(restored.saved[0].snapshot.model.names.at(-1),/LKOH/);
 });
 
 test('named sets survive rereads, same names replace a set, deletion is persisted and failed writes leave the stored library intact',()=>{

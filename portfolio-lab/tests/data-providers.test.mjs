@@ -51,7 +51,8 @@ function fixtureFetch(overrides = {}) {
     if (url.includes('/ipc_mes_')) return new Response(workbook(cpiTable, '01'));
     if (url.includes('/xml_metall.asp')) return new Response(metalXML);
     if (url.includes('/XML_dynamic.asp')) return new Response(currencyXML);
-    if (url.includes('/RUCBTRNS/candles.json')) return new Response(JSON.stringify({ candles: { columns: ['begin', 'close'], data: months.map((m, i) => [`${m}-01 00:00:00`, 300 + i * 3]) } }));
+    if (url.includes('/SBER/candles.json')) return new Response(JSON.stringify({ candles: { columns: ['begin', 'close'], data: months.map((m, i) => [`${m}-01 00:00:00`, 300 + i * 3]) } }));
+    if (url.includes('/LKOH/candles.json')) return new Response(JSON.stringify({ candles: { columns: ['begin', 'close'], data: months.map((m, i) => [`${m}-01 00:00:00`, 5000 + i * 50]) } }));
     if (url.includes('/candles.json')) return new Response(JSON.stringify(candles));
     throw new Error(`Unexpected URL ${url}`);
   };
@@ -139,32 +140,41 @@ test('provider orchestrates only official sources and returns a complete engine-
   assert.equal(data.rows[0].values[8], 200);
   assert.equal(data.names[0], 'Рублёвая масса М2');
   assert.equal(data.names.length, 11);
-  assert.equal(data.names[10], 'Корпоративные облигации / RUCBTRNS');
-  assert.deepEqual(data.rows.map(row => row.values[10]), months.map((_, i) => 300 + i * 3));
-  const corporateRequest = new URL(requested.find(url => url.includes('/RUCBTRNS/')));
-  assert.equal(corporateRequest.hostname, 'iss.moex.com');
-  assert.equal(corporateRequest.searchParams.get('interval'), '31');
-  assert.equal(corporateRequest.searchParams.get('from'), '2024-01-01');
-  assert.equal(corporateRequest.searchParams.get('till'), '2025-01-31');
+  assert.equal(data.names[7], 'Сбербанк / SBER');
+  assert.equal(data.names[10], 'Лукойл / LKOH');
+  assert.deepEqual(data.rows.map(row => row.values[7]), months.map((_, i) => 300 + i * 3));
+  assert.deepEqual(data.rows.map(row => row.values[10]), months.map((_, i) => 5000 + i * 50));
+  assert.ok(!data.names.some(name => /Юань|RUCBTRNS|YDEX/.test(name)));
+  assert.ok(!requested.some(url => /R01375|RUCBTRNS|YDEX/.test(url)));
+  for (const ticker of ['SBER', 'LKOH']) {
+    const request = new URL(requested.find(url => url.includes(`/${ticker}/`)));
+    assert.equal(request.hostname, 'iss.moex.com');
+    assert.equal(request.pathname, `/iss/engines/stock/markets/shares/boards/TQBR/securities/${ticker}/candles.json`);
+    assert.equal(request.searchParams.get('interval'), '31');
+    assert.equal(request.searchParams.get('from'), '2024-01-01');
+    assert.equal(request.searchParams.get('till'), '2025-01-31');
+  }
   const model = estimate(data, 12);
   assert.equal(model.names.length, 10);
   assert.ok(Math.abs(model.returns[0][9] - ((303 / 300) / 1.002 - 1)) < 1e-12);
+  assert.ok(data.provenance.at(-1).indicators.includes(data.names[7]));
   assert.ok(data.provenance.at(-1).indicators.includes(data.names[10]));
-  assert.match(data.provenance.at(-1).method, /RUCBTRNS/);
+  assert.ok(!data.provenance[1].indicators.includes(data.names[7]));
+  assert.match(data.provenance.at(-1).method, /SBER и LKOH/);
+  assert.match(data.provenance.at(-1).method, /без дивидендов/);
   assert.equal(estimate(data,12).returns.length, 12);
 });
 
-test('RUCBTRNS rejects unavailable history and missing monthly closes without substituting other indices', async () => {
-  const {fake, requested} = fixtureFetch();
-  await assert.rejects(loadMarketData('2018-11', '2019-11', {fetchImpl: fake, now, useCache: false}), error =>
-    error.status === 422 && error.code === 'MISSING_DATA' && error.message.includes('2018-12'));
-  assert.equal(requested.length, 0);
-  const fetchImpl = async url => {
-    if (!url.includes('/RUCBTRNS/')) return fake(url);
-    return new Response(JSON.stringify({candles: {columns: ['begin', 'close'], data: months.slice(1).map(m => [`${m}-01`, 300])}}));
-  };
-  await assert.rejects(loadMarketData('2024-01', '2025-01', {fetchImpl, now, useCache: false}), error =>
-    error.status === 422 && error.code === 'MISSING_DATA' && error.missingMonth === '2024-01' && error.message.includes('RUCBTRNS'));
+test('missing stock closes are rejected without substituting other stocks or indices', async () => {
+  for (const ticker of ['SBER', 'LKOH']) {
+    const {fake} = fixtureFetch();
+    const fetchImpl = async url => {
+      if (!url.includes(`/${ticker}/`)) return fake(url);
+      return new Response(JSON.stringify({candles: {columns: ['begin', 'close'], data: months.slice(1).map(m => [`${m}-01`, 300])}}));
+    };
+    await assert.rejects(loadMarketData('2024-01', '2025-01', {fetchImpl, now, useCache: false}), error =>
+      error.status === 422 && error.code === 'MISSING_DATA' && error.missingMonth === '2024-01' && error.message.includes(ticker));
+  }
 });
 
 test('upstream failure is explicit, and invalid periods make no network requests', async () => {

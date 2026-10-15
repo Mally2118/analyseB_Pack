@@ -27,9 +27,9 @@ function fixture() {
 const requested = ['2019-12', '2020-12'];
 const select = snapshot => selectSnapshotPeriod(snapshot, ...requested, { now });
 
-test('snapshot selection and the local API retain the corporate bond series and its inflation-adjusted returns', async () => {
+test('snapshot selection and the local API retain the LUKOIL share series and its inflation-adjusted returns', async () => {
   const original = fixture();
-  original.names.push('Корпоративные облигации / RUCBTRNS');
+  original.names.push('Лукойл / LKOH');
   original.rows.forEach((row, i) => row.values.push(100 * 1.006 ** i));
   const selected = select(original);
   assert.equal(selected.names.length, 11);
